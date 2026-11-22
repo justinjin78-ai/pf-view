@@ -1,0 +1,2478 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard</title>
+<script>
+  /* 테마를 가장 먼저 적용(깜빡임 방지). 저장값 > OS 설정 */
+  (function(){
+    var t = null;
+    try{ t = localStorage.getItem('nhdash:theme'); }catch(e){}
+    if(t !== 'light' && t !== 'dark'){
+      t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+/* ===== 0. 색상 변수 (색은 여기서만 정의) ===== */
+:root, [data-theme="light"]{
+  --bg:#FAFAFA; --panel:#FFFFFF; --head-bg:#F4F4F5; --border:#E4E4E7;
+  --text:#09090B; --muted:#71717A;
+  --accent:#4A56C4; --on-accent:#FFFFFF;
+  --pos:#16A34A; --neg:#DC2626; --warn:#B7791F; --radius:8px;
+}
+[data-theme="dark"]{
+  --bg:#101113; --panel:#17181B; --head-bg:#17181B; --border:#26282C;
+  --text:#E6E6E8; --muted:#8A8F98;
+  --accent:#5E6AD2; --on-accent:#FFFFFF;
+  --pos:#4CB782; --neg:#EB5757; --warn:#E0A94A;
+}
+
+/* ===== 1. 기본 ===== */
+*{ box-sizing:border-box; }
+html,body{ margin:0; }
+body{ background:var(--bg); color:var(--text); font-size:14px; font-weight:400;
+  font-family:-apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+.wrap{ max-width:1200px; margin:0 auto; padding:16px; }
+h2{ font-size:15px; font-weight:500; margin:0; }
+.muted{ color:var(--muted); }
+.small{ font-size:12px; }
+.num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.pos{ color:var(--pos); } .neg{ color:var(--neg); }
+.hidden{ display:none !important; }
+
+/* ===== 2. 헤더 ===== */
+header{ background:var(--head-bg); border-bottom:1px solid var(--border); }
+header .wrap{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding-top:12px; padding-bottom:12px; }
+.title{ font-size:16px; font-weight:500; }
+.ver{ font-size:11px; color:var(--muted); border:1px solid var(--border); border-radius:4px; padding:1px 6px; }
+.asof{ font-size:12px; color:var(--muted); }
+.spacer{ flex:1; }
+
+/* 탭: 헤더 아래 고정 띠. 선택 탭은 accent 밑줄 */
+.tabs{ position:sticky; top:0; z-index:10; background:var(--bg); border-bottom:1px solid var(--border); }
+.tabs .wrap{ display:flex; gap:4px; padding-top:0; padding-bottom:0; overflow-x:auto; }
+.tabs button{ border:0; border-radius:0; background:transparent; color:var(--muted); padding:10px 14px;
+  border-bottom:2px solid transparent; font-size:14px; white-space:nowrap; flex-shrink:0; }
+.tabs button:hover{ color:var(--text); }
+.tabs button.on{ color:var(--text); border-bottom-color:var(--accent); font-weight:500; }
+
+/* 선택 계좌 표시(탭 띠 오른쪽). 연한 accent 배경 + 진한 글자 */
+.filter-chip{ align-self:center; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:12px; color:var(--muted); }
+.filter-chip select{ padding:3px 6px; font-size:12px; }
+.filter-chip.on select{ color:var(--accent); border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.filter-chip .btn-text{ color:var(--accent); padding:2px 6px; font-size:12px; }
+
+.chk-list{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:4px; }
+.chk-list input{ width:auto !important; }   /* .form-row input 폭(140px/100%) 규칙 제외 */
+
+/* ===== 3. 버튼·입력 ===== */
+button, .btn{ font:inherit; font-size:13px; border-radius:6px; cursor:pointer; padding:6px 12px;
+  border:1px solid var(--border); background:var(--panel); color:var(--text); }
+button:hover{ border-color:var(--muted); }
+.btn-primary{ background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+.btn-text{ border-color:transparent; background:transparent; color:var(--muted); padding:6px 8px; }
+.btn-text:hover{ color:var(--text); border-color:transparent; }
+.seg{ display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.seg button{ border:0; border-radius:0; padding:5px 12px; background:var(--panel); color:var(--muted); }
+.seg button.on{ background:var(--accent); color:var(--on-accent); }
+input, select{ font:inherit; font-size:13px; padding:6px 8px; border:1px solid var(--border);
+  border-radius:6px; background:var(--panel); color:var(--text); }
+input[type="checkbox"]{ padding:0; }
+label.chk{ display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); cursor:pointer; }
+
+/* ===== 4. 카드·배너 ===== */
+.card{ background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; margin-bottom:14px; }
+.card-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.banner{ border:1px solid var(--warn); color:var(--warn); background:var(--panel); border-radius:var(--radius);
+  padding:10px 14px; margin-bottom:14px; font-size:13px; }
+.banner.info{ border-color:var(--border); color:var(--text); }
+.help{ font-size:13px; line-height:1.7; }
+.help code{ background:var(--head-bg); border:1px solid var(--border); border-radius:4px; padding:0 4px; }
+
+/* minmax(0,1fr) + min-width:0 : 긴 글자가 칸을 밀어 페이지가 가로로 넘치는 것 방지 */
+.summary{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; margin-bottom:14px; }
+.stat{ background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; min-width:0; }
+.stat .lbl{ font-size:12px; color:var(--muted); }
+.stat .val{ font-size:20px; font-weight:500; margin-top:4px; font-variant-numeric:tabular-nums; }
+.stat .sub{ font-size:12px; color:var(--muted); margin-top:4px; font-variant-numeric:tabular-nums; }
+
+.charts{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
+.charts > .card{ min-width:0; }
+.chart-box{ position:relative; height:300px; }
+.chart-fallback{ color:var(--muted); font-size:13px; padding:20px 0; }
+
+/* ===== 5. 표 ===== */
+.tbl-wrap{ overflow-x:auto; }
+table{ width:100%; border-collapse:collapse; font-size:13px; }
+th, td{ padding:7px 8px; border-bottom:1px solid var(--border); text-align:left; }
+th{ background:var(--head-bg); font-weight:500; color:var(--muted); white-space:nowrap; }
+th.sortable{ cursor:pointer; user-select:none; }
+th.sortable:hover{ color:var(--text); }
+tbody tr.click{ cursor:pointer; }
+/* 다크 테마는 --head-bg 가 --panel 과 같아 구분이 안 됨 → accent 를 옅게 섞어 표시 */
+tbody tr.click:hover td{ background:color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+tr.sel td{ background:color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+tr.hl td{ background:color-mix(in srgb, var(--accent) 6%, var(--panel)); }   /* 차트에서 강조 중인 항목(v11) */
+tr.sel td:first-child{ box-shadow:inset 3px 0 0 var(--accent); }
+tr.total td{ font-weight:500; border-top:1px solid var(--muted); }
+.code{ font-size:11px; color:var(--muted); margin-left:4px; }
+#acctTable td:first-child, #manualTable td:first-child{ white-space:nowrap; }
+
+/* 상태 태그: 연한 배경 + 진한 글자 */
+.tag{ display:inline-block; font-size:11px; padding:1px 6px; border-radius:4px; white-space:nowrap;
+  color:var(--muted); background:var(--head-bg); border:1px solid var(--border); }
+.tag.api{ color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--panel)); border-color:transparent; }
+.tag.manual{ color:var(--warn); background:color-mix(in srgb, var(--warn) 14%, var(--panel)); border-color:transparent; }
+
+.bar{ display:inline-block; height:6px; border-radius:3px; background:var(--accent); vertical-align:middle; margin-right:6px; opacity:.7; }
+
+/* 수동 계좌 입력 폼 */
+.form-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:12px; }
+.form-row .f{ display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+.form-row input{ width:140px; }
+
+/* ===== 6. 반응형 (720px 이하) ===== */
+@media (max-width:720px){
+  .summary{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .charts{ grid-template-columns:minmax(0, 1fr); }
+  .chart-box{ height:320px; }
+  .stat .val{ font-size:17px; }
+  .form-row input{ width:100%; }
+  .form-row .f{ flex:1 1 45%; }
+  .col-opt{ display:none; }
+  .tabs button{ padding:10px 10px; }  /* 탭 띠에 계좌 선택까지 들어가도록 */
+  .chip-lbl{ display:none; }   /* 좁은 화면에서 덜 중요한 열 숨김 */
+}
+</style>
+
+<style>
+  /* 비밀번호 화면(모바일 전용). 풀리기 전에는 대시보드 화면을 숨김 */
+  body.locked > :not(#lock){ display:none !important; }
+  #lock{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; box-sizing:border-box; }
+  #lock form{ width:100%; max-width:320px; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+              padding:20px; display:flex; flex-direction:column; gap:10px; box-sizing:border-box; }
+  #lock .lock-title{ font-weight:500; font-size:15px; color:var(--text); }
+  #lock input{ font:inherit; font-size:16px; padding:8px 10px; border:1px solid var(--border); border-radius:6px;
+               background:var(--bg); color:var(--text); }
+  #lock button{ font:inherit; padding:8px 10px; border:0; border-radius:6px; background:var(--accent); color:var(--on-accent); cursor:pointer; }
+  #lock button:disabled{ opacity:.6; }
+  #lock .lock-msg{ font-size:13px; color:var(--muted); min-height:18px; }
+  #lock .lock-msg.err{ color:var(--neg); }
+</style>
+</head>
+<body class="locked">
+
+<div id="lock">
+  <form id="lockForm" autocomplete="off">
+    <div class="lock-title">Dashboard</div>
+    <input type="password" id="lockPw" placeholder="비밀번호" autocomplete="current-password" required>
+    <button type="submit" id="lockBtn">열기</button>
+    <div class="lock-msg" id="lockMsg">읽기 전용 · 데이터는 이 화면에서만 풀립니다</div>
+  </form>
+</div>
+
+<header>
+  <div class="wrap">
+    <span class="title">주식관리 대시보드</span>
+    <span class="ver" id="verTag">v12</span>
+    <span class="asof" id="asof"></span>
+    <span class="spacer"></span>
+    <div class="seg" id="groupSeg" title="계좌 그룹">
+      <button data-group="all">전체</button><button data-group="domestic">국내</button><button data-group="overseas">해외</button>
+    </div>
+    <div class="seg" id="curSeg" title="표시 통화">
+      <button data-cur="KRW">원화</button><button data-cur="USD">달러</button>
+    </div>
+    <button class="btn-text" id="helpBtn">업데이트 방법</button>
+    <button id="themeBtn">다크</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <div class="wrap">
+    <button data-tab="status">현황</button><button data-tab="trend">추이</button><button data-tab="dividend">배당</button><button data-tab="manage">관리</button>
+    <span class="spacer"></span>
+    <span class="filter-chip" id="filterChip"><span class="chip-lbl">계좌</span>
+      <select id="acctSel" title="계좌 선택 — 현황·추이·배당 탭에 함께 적용"></select>
+      <button class="btn-text hidden" id="filterClear" title="전체 계좌로 보기">✕</button></span>
+  </div>
+</nav>
+
+<main class="wrap">
+  <div class="banner hidden" id="warn"></div>
+  <div class="banner hidden" id="restoreBar"><span id="restoreText"></span>
+    <button id="restoreBtn">복원</button> <button class="btn-text" id="restoreClose">닫기</button></div>
+  <div class="banner info hidden" id="inboxBar"><span id="inboxText"></span> <button class="btn-text" id="inboxClose">닫기</button></div>
+  <div class="banner hidden" id="backupBar"><span id="backupBarText"></span> <button id="backupBarBtn"></button></div>
+
+  <div class="card help hidden" data-tab="manage" id="helpPanel">
+    <b style="font-weight:500">데이터 업데이트</b><br>
+    1) 폴더의 <code>업데이트.bat</code> 더블클릭 → 계좌별 잔고가 수집되고 오늘 날짜 스냅샷이 저장됩니다.<br>
+    2) 완료되면 이 페이지를 새로고침(F5) 하세요. (데이터 파일은 페이지를 열 때 한 번 읽습니다)<br>
+    3) 같은 날 여러 번 실행하면 그날 스냅샷은 마지막 값으로 덮어씁니다.<br>
+    4) 배당 기록(거래내역)도 함께 수집됩니다. 첫 실행은 전체 기간이라 1~2분, 이후는 최근 1주일만 다시 받습니다.<br>
+    <span class="muted">연금저축·ISA는 API 미지원 → 아래 '수동 계좌'에 총액을 직접 기록합니다.</span><br>
+    5) 연금저축·ISA 자동 반영: HTS 국내 잔고를 <code>수동엑셀</code> 폴더에 <code>계좌이름.xlsx</code>(예: 연금저축1.xlsx)로 저장 →
+       업데이트.bat(또는 07:00 자동 수집) → 새로고침하면 종목까지 기록됩니다. 기준일 = 파일 저장 날짜, 예수금은 직전 기록값 유지.
+  </div>
+
+  <div class="card hidden" id="noData">
+    <h2>데이터가 없습니다</h2>
+    <p class="help muted"><code>data/data.js</code> 를 찾지 못했습니다. 폴더의 <code>업데이트.bat</code> 을 먼저 실행한 뒤 새로고침하세요.
+    수동 계좌만으로도 아래 기능은 사용할 수 있습니다.</p>
+  </div>
+
+  <section data-tab="status" class="summary" id="summary"></section>
+
+  <section data-tab="status" class="card">
+    <div class="card-head"><h2>계좌별 현황</h2><span class="muted small" id="acctHint">행을 누르면 보유 종목·자산 비중·상위 종목이 그 계좌 기준으로 바뀝니다 (합계 행: 전체)</span></div>
+    <div class="tbl-wrap"><table id="acctTable"></table></div>
+  </section>
+
+  <section data-tab="trend" class="card">
+    <div class="card-head">
+      <h2 id="trendTitle" data-base="자산 추이">자산 추이</h2><span class="spacer"></span>
+      <div class="seg" id="trendModeSeg"><button data-v="total">합계</button><button data-v="account">계좌별</button></div>
+      <div class="seg" id="trendMetricSeg"><button data-v="amount">금액</button><button data-v="rate">수익률</button></div>
+      <div class="seg" id="trendRangeSeg"><button data-v="1">1M</button><button data-v="3">3M</button><button data-v="6">6M</button><button data-v="ytd">YTD</button><button data-v="12">1Y</button><button data-v="0">전체</button></div>
+      <select id="trendYear" title="연도 선택"></select>
+    </div>
+    <div class="chart-box" id="trendBox"><canvas id="trendChart"></canvas></div>
+    <div class="muted small" id="trendNote" style="margin-top:8px; line-height:1.6"></div>
+  </section>
+
+  <section data-tab="trend" class="card">
+    <div class="card-head">
+      <h2 id="weightTitle" data-base="비중 변화">비중 변화</h2><span class="muted small">기간·그룹·통화·계좌는 위 설정을 따릅니다</span><span class="spacer"></span>
+      <div class="seg" id="weightModeSeg"><button data-v="holding">종목별</button><button data-v="account">계좌별</button></div>
+    </div>
+    <div class="small hidden" id="weightFocusBar" style="margin-bottom:6px"><span id="weightFocusText"></span>
+      <button class="btn-text" id="weightFocusClear" title="전체 비중 그래프로 돌아가기">✕ 전체 보기</button></div>
+    <div class="chart-box" id="weightBox"><canvas id="weightChart"></canvas></div>
+    <div class="tbl-wrap" style="margin-top:10px"><table id="weightTable"></table></div>
+    <div class="muted small" id="weightNote" style="margin-top:8px; line-height:1.6"></div>
+  </section>
+
+  <section data-tab="dividend" class="card">
+    <div class="card-head">
+      <h2 id="divTitle" data-base="배당">배당</h2><span class="muted small">그룹·통화·계좌는 상단 설정을 따릅니다</span><span class="spacer"></span>
+      <div class="seg" id="divTaxSeg"><button data-v="gross">세전</button><button data-v="net">세후</button></div>
+      <div class="seg" id="divRangeSeg"><button data-v="ytd">YTD</button><button data-v="12">1Y</button><button data-v="24">2Y</button><button data-v="36">3Y</button><button data-v="0">전체</button></div>
+      <select id="divYear" title="연도 선택"></select>
+    </div>
+    <div class="summary" id="divSummary"></div>
+    <div class="chart-box" id="divBox"><canvas id="divChart"></canvas></div>
+    <div class="tbl-wrap" style="margin-top:10px"><table id="divTable"></table></div>
+    <div class="muted small" id="divNote" style="margin-top:8px; line-height:1.6"></div>
+  </section>
+
+  <section data-tab="status" class="charts">
+    <div class="card">
+      <div class="card-head">
+        <h2 id="pieTitle">자산 비중</h2><span class="spacer"></span>
+        <div class="seg" id="pieSeg"><button data-mode="account">계좌별</button><button data-mode="holding">종목별</button></div>
+      </div>
+      <div class="chart-box"><canvas id="pieChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2 id="barTitle">상위 종목</h2><span class="muted small" id="barUnit"></span></div>
+      <div class="chart-box"><canvas id="barChart"></canvas></div>
+    </div>
+  </section>
+
+  <section data-tab="status" class="card">
+    <div class="card-head">
+      <h2>보유 종목</h2>
+      <select id="acctFilter"></select>
+      <label class="chk"><input type="checkbox" id="mergeChk"> 같은 종목 합치기</label>
+      <span class="spacer"></span>
+      <span class="muted small" id="rateNote"></span>
+    </div>
+    <div class="tbl-wrap"><table id="holdTable"></table></div>
+  </section>
+
+  <section data-tab="manage" class="card">
+    <div class="card-head"><h2>수동 계좌</h2><span class="muted small">연금저축·ISA 등 API 미지원 계좌. 금액은 원화로 입력(달러 모드에서는 환산 표시)</span></div>
+    <div class="tbl-wrap"><table id="manualTable"></table></div>
+    <div class="form-row">
+      <div class="f">계좌 이름<input id="mName" list="mNames" placeholder="예: 연금저축1"><datalist id="mNames"></datalist></div>
+      <div class="f">기준일<input id="mDate" type="date"></div>
+      <div class="f">총자산(원)<input id="mTotal" inputmode="numeric" placeholder="0"></div>
+      <div class="f">예수금(원)<input id="mCash" inputmode="numeric" placeholder="0"></div>
+      <div class="f">평가손익(원)<input id="mPl" inputmode="numeric" placeholder="−는 손실"></div>
+      <button class="btn-primary" id="mSave">기록</button>
+    </div>
+    <div class="muted small" style="margin-top:8px">같은 계좌·같은 기준일로 다시 기록하면 덮어씁니다. 날짜별 기록은 자산 추이·비중 변화에 사용됩니다.</div>
+    <div style="margin-top:12px">
+      <button id="xlsxBtn">잔고 엑셀 가져오기</button>
+      <span class="muted small">나무증권 국내 잔고 파일(.xlsx) 여러 개 선택 → 파일명으로 계좌 연결 → 예수금 입력 후 기록. 종목까지 저장됩니다.</span>
+      <input type="file" id="xlsxFile" accept=".xlsx,.xls" multiple class="hidden">
+    </div>
+    <div class="hidden" id="xlsxPanel" style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px">
+      <div class="tbl-wrap"><table id="xlsxTable"></table></div>
+      <div class="form-row">
+        <div class="f">기준일<input id="xlsxDate" type="date"></div>
+        <button id="xlsxSave">선택 계좌 기록</button>
+        <button class="btn-text" id="xlsxClose">닫기</button>
+        <span class="muted small" id="xlsxMsg"></span>
+      </div>
+    </div>
+  </section>
+
+  <section data-tab="manage" class="card">
+    <div class="card-head"><h2>내 계좌 그룹</h2><span class="muted small">여러 계좌를 묶어 탭 띠 '계좌' 선택에서 한 번에 보기 (예: 묶음A = 계좌1 + 계좌2)</span></div>
+    <div class="tbl-wrap"><table id="grpTable"></table></div>
+    <div class="form-row">
+      <div class="f">그룹 이름<input id="gName" placeholder="예: 묶음A"></div>
+      <div class="f" style="flex:1 1 100%">구성 계좌<div id="gMembers" class="chk-list"></div></div>
+      <button id="gSave">그룹 저장</button>
+    </div>
+    <div class="muted small" style="margin-top:8px">같은 이름으로 저장하면 구성을 덮어씁니다. 표의 행을 누르면 아래 폼에 채워집니다. 헤더의 국내/해외 그룹과 겹치는 계좌만 보입니다.</div>
+  </section>
+
+  <section data-tab="manage" class="card">
+    <div class="card-head"><h2>백업</h2><span class="muted small">대상: 수동 계좌 기록 + 001 가져온 이력 + 내 계좌 그룹 + 화면 설정 (API 데이터는 업데이트 때 backup/data_월.zip 으로 보관)</span></div>
+    <div style="margin-bottom:12px">
+      <b style="font-weight:500">자동 저장</b> <span class="muted small" id="autoStatus"></span><br>
+      <button id="dirConnect" style="margin-top:6px">백업 폴더 연결</button>
+      <button class="btn-text hidden" id="dirDisconnect">연결 해제</button>
+      <span class="muted small">002주식관리자동화 안의 <code>backup</code> 폴더를 한 번 고르면 이후 자동 저장(Chrome·Edge)</span>
+    </div>
+    <button id="exportBtn">백업 내보내기</button>
+    <button id="importBtn">백업 불러오기</button>
+    <button id="import001Btn">001 백업 가져오기</button>
+    <span class="muted small" id="legacyInfo"></span>
+    <input type="file" id="importFile" accept=".json,application/json" class="hidden">
+    <input type="file" id="import001File" accept=".json,application/json" class="hidden">
+  </section>
+</main>
+
+<script type="text/plain" id="app-main">
+/* ===== 0. 설정값 (직접 수정 가능) ===== */
+const CONFIG = {
+  VERSION: 'v12',
+  WEIGHT_TOP_N: 10,           // 비중 변화에 개별 표시할 종목 수(기간 마지막 날 비중 상위). 나머지는 '기타'
+  TREND_DEFAULT_RANGE: 0,     // 자산 추이 기본 기간(개월). 0 = 전체, 'ytd' = 올해
+  PREFIX: 'nhdash:',          // localStorage 키 접두어(다른 도구와 충돌 방지)
+  BACKUP_DIR_NAME: 'backup',  // 자동 저장 폴더 이름(연결할 때 이름이 다르면 확인 창)
+  STALE_DATA_DAYS: 2,         // 잔고 데이터가 이 일수 이상 지나면 상단 경고(자동 수집 확인용)
+  DEFAULT_CURRENCY: 'KRW',    // 처음 열 때 통화: 'KRW' | 'USD'
+  // 계좌 그룹: API 계좌 별칭(id, config.local.json 의 id) → 'domestic'(국내) | 'overseas'(해외)
+  //   여기에 없는 API 계좌는 '전체'에서만 보임
+  ACCOUNT_GROUPS: { kr2:'domestic', growth3:'overseas', growth4:'overseas', div5:'overseas', temp:'overseas' },
+  MANUAL_GROUP: 'domestic',   // 수동 계좌(연금저축·ISA)가 속할 그룹
+  GROUP_LABEL: { all:'전체', domestic:'국내', overseas:'해외' },
+  GROUP_CURRENCY: { all:'KRW', domestic:'KRW', overseas:'USD' },  // 그룹 선택 시 자동 전환할 표시 통화
+  DEFAULT_MERGE: true,        // '전체' 보기에서 같은 종목 합치기 기본값
+  PIE_TOP_N: 11,              // 종목별 도넛에 개별 표시할 종목 수(나머지는 '기타')
+  BAR_TOP_N: 10,              // 상위 종목 막대 개수
+  // 차트 항목 팔레트: 라이트/다크 양쪽에서 구분되는 중간 명도로 고정
+  PALETTE: ['#4F79C9','#D98A3D','#3E9E6A','#C9535C','#8B6CC9','#2F9CAB','#B5A13A','#C46CA2',
+            '#6E829E','#9E7046','#5F9E44','#B0699A'],
+  US_WITHHOLD_RATE: 0.15,     // 미국 배당 원천징수율(해외 배당 세전 금액 추정에 사용)
+  DIV_DEFAULT_RANGE: 12,      // 배당 차트·표 기본 기간(개월). 0 = 전체, 'ytd' = 올해 1월~
+  DIV_DEFAULT_TAX: 'gross',   // 배당 기본 표시: 'gross'(세전) | 'net'(세후)
+  INTEREST_COLOR: '#A8B48C',  // 배당 차트 '이자'(예탁금이용료)
+  REFUND_COLOR: '#B5A13A',    // 배당 차트 '세금환급'
+  ETC_COLOR: '#8C8C8C',       // 도넛 '기타'
+  CASH_COLOR: '#A8B48C'       // 도넛 '예수금'
+};
+
+/* ===== 1. 저장소 (localStorage, 실패 시 경고 표시) ===== */
+let storageOk = true;
+/*
+  모바일 읽기 전용 모드(v12): 폰용 index.html 이 복호화 후 window.NH_MOBILE = { backup:{manual, legacy, groups}, published_at } 를 넣음.
+  - MOBILE_MEM_KEYS 는 복호화한 데이터(메모리)에서만 읽고, 폰 브라우저에는 저장하지 않음(금융 데이터가 기기에 남지 않게)
+  - 그 밖의 화면 설정(탭·통화·테마 등)은 평소처럼 저장
+*/
+const MOBILE = window.NH_MOBILE || null;
+const MOBILE_MEM_KEYS = ['manual', 'legacy', 'groups', 'inboxApplied', 'lastExport', 'lastChange'];
+/** 키 읽기. 입력: 키(접두어 제외), 기본값 / 출력: 파싱된 값. 실패 시 기본값 */
+function load(key, def){
+  if(MOBILE && MOBILE_MEM_KEYS.includes(key)){
+    const v = MOBILE.backup ? MOBILE.backup[key] : undefined;
+    return v === undefined ? def : v;
+  }
+  try{
+    const v = localStorage.getItem(CONFIG.PREFIX + key);
+    return v === null ? def : JSON.parse(v);
+  }catch(e){ warnStorage(e); return def; }
+}
+/** 키 저장. 출력: 성공 여부. 실패하면 화면 상단에 경고 */
+const BACKUP_KEYS = ['manual', 'legacy', 'groups'];   // 바뀌면 자동 백업하는 키
+function save(key, val){
+  if(MOBILE && MOBILE_MEM_KEYS.includes(key)) return true;   // 모바일: 메모리에만(저장 안 함)
+  try{
+    localStorage.setItem(CONFIG.PREFIX + key, JSON.stringify(val));
+    if(BACKUP_KEYS.includes(key)) markChanged();
+    return true;
+  }
+  catch(e){ warnStorage(e); return false; }
+}
+function warnStorage(e){
+  storageOk = false;
+  console.error('저장 실패', e);
+  showWarn('브라우저 저장소에 저장하지 못했습니다(용량 초과·사생활 보호 모드 등). 새로고침하면 수동 입력/설정이 사라질 수 있으니 백업을 내보내 두세요.');
+}
+function showWarn(msg){
+  const el = document.getElementById('warn');
+  el.textContent = msg; el.classList.remove('hidden');
+}
+
+/* ===== 2. 상태 ===== */
+const NH = (window.NH_DATA && Array.isArray(window.NH_DATA.snapshots)) ? window.NH_DATA : null;
+const SNAPS = NH ? NH.snapshots.slice().sort((a,b) => a.date.localeCompare(b.date)) : [];
+const LATEST = SNAPS.length ? SNAPS[SNAPS.length - 1] : null;
+const PREV = SNAPS.length > 1 ? SNAPS[SNAPS.length - 2] : null;
+
+const state = {
+  currency: load('currency', CONFIG.DEFAULT_CURRENCY),
+  group: load('group', 'all'),         // 계좌 그룹: 'all' | 'domestic' | 'overseas'
+  merge: load('merge', CONFIG.DEFAULT_MERGE),
+  pieMode: load('pieMode', 'account'),
+  sort: { key: 'eval', dir: -1 },
+  manual: load('manual', []),          // [{id, name, entries:[{date,total,cash,pl}]}] (원화)
+  // 001에서 가져온 이력: {importedAt, accounts:{ API계좌id 또는 'manual:'+수동id: {name, currency, points:[{date,eval,buy,pl,cash}], holdings:[...]}}}
+  legacy: load('legacy', { accounts:{} }),
+  trendMode: load('trendMode', 'total'),        // 'total' | 'account'
+  trendMetric: load('trendMetric', 'amount'),   // 'amount' | 'rate'
+  trendRange: load('trendRange', CONFIG.TREND_DEFAULT_RANGE),  // 개월, 0=전체, 'ytd'=올해
+  weightMode: load('weightMode', 'holding'),    // 비중 변화: 'holding' | 'account'
+  divTax: load('divTax', CONFIG.DIV_DEFAULT_TAX),  // 배당: 'gross' | 'net'
+  tab: load('tab', 'status'),
+  filter: load('filter', 'all'),       // 선택 범위: 'all' | API계좌id | 'manual:'+수동id | 'grp:'+그룹id (마지막 선택 기억)
+  groups: load('groups', []),          // 내 계좌 그룹: [{id, name, members:[계좌 키...]}]          // 보이는 탭: 'status' | 'trend' | 'dividend' | 'manage'
+  divRange: load('divRange', CONFIG.DIV_DEFAULT_RANGE)               // 배당 기간(개월), 0=전체, 'ytd'=올해
+};
+let charts = { pie: null, bar: null, trend: null, weight: null, div: null };
+
+/* 배당·이자 기록(data.js income, 수집기 v4~). 행: {date, acct, kind:'div'|'refund'|'interest', cur, code, ticker, name, amt, tax_krw} */
+const INCOME = (NH && Array.isArray(NH.income)) ? NH.income : [];
+
+/* 과거 환율 이력(data.js, 유럽중앙은행 기준) — 날짜 오름차순 */
+const FX_HIST = (NH && NH.fx_history) || {};
+const FX_DATES = Object.keys(FX_HIST).sort();
+
+/* ===== 3. 계산 함수 ===== */
+/** 스냅샷의 USD 환율(원/달러). 없으면 null → 달러 모드 사용 불가 */
+function fxOf(snap){ return snap && snap.fx && snap.fx.USD ? Number(snap.fx.USD) : null; }
+
+/**
+ * 종목 1개를 선택 통화 값으로 변환.
+ * 입력: 스냅샷 종목 h, 통화 cur, 환율 fx / 출력: {qty, avg, price, eval, buy, pl, rate ...}
+ * 원화: API 원화값. 달러: 미국 종목은 API 외화값, 그 외는 원화 ÷ 당일 환율.
+ */
+function holdingView(h, cur, fx){
+  const v = { code:h.code, name:h.name, market:h.market, nativeCur:h.currency, qty:h.qty };
+  if(cur === 'KRW'){
+    v.eval = h.eval_krw; v.buy = h.buy_krw; v.pl = h.pl_krw;
+    v.price = h.price_krw != null ? h.price_krw : h.eval_krw / h.qty;
+    v.avg = h.avg_price_krw != null ? h.avg_price_krw : h.buy_krw / h.qty;
+  }else if(h.currency === 'USD' && h.eval_fc != null){
+    v.eval = h.eval_fc; v.buy = h.buy_fc;
+    v.pl = h.pl_fc != null ? h.pl_fc : h.eval_fc - h.buy_fc;
+    v.price = h.price; v.avg = h.avg_price;
+  }else{ // 국내 종목 등: 당일 환율로 단순 환산(매입금액도 당일 환율 → 단순화)
+    v.eval = h.eval_krw / fx; v.buy = h.buy_krw / fx; v.pl = h.pl_krw / fx;
+    v.price = (h.price_krw != null ? h.price_krw : h.eval_krw / h.qty) / fx;
+    v.avg = (h.avg_price_krw != null ? h.avg_price_krw : h.buy_krw / h.qty) / fx;
+  }
+  v.rate = v.buy ? v.pl / v.buy * 100 : 0;
+  return v;
+}
+
+/**
+ * API 계좌 1개 → 선택 통화 요약.
+ * 총자산 = 평가금액 합 + 예수금. 달러 예수금 = 원화예수금 ÷ 환율 + 외화(USD) 예수금
+ */
+function apiAccountView(a, cur, fx){
+  const holdings = a.holdings.map(h => Object.assign(holdingView(h, cur, fx), { acctId:a.id, acctName:a.name }));
+  let cash;
+  if(cur === 'KRW') cash = a.cash_krw;
+  else if(a.cash_krw_only != null){
+    const fcUsd = (a.cash_fc && a.cash_fc.USD) || 0;
+    const fcOtherKrw = a.cash_krw - a.cash_krw_only - fcUsd * fx;   // USD 외 외화(현재 없음)를 원화로 보정
+    cash = (a.cash_krw_only + fcOtherKrw) / fx + fcUsd;
+  }else cash = a.cash_krw / fx;                                       // 구형 스냅샷 대비
+  const sum = k => holdings.reduce((s, h) => s + h[k], 0);
+  const ev = sum('eval'), buy = sum('buy'), pl = sum('pl');
+  return { id:a.id, name:a.name, source:'api', order:a.order, holdings,
+           eval:ev, buy, pl, cash, total:ev + cash, rate: buy ? pl / buy * 100 : 0 };
+}
+
+/** 수동 계좌 1개 → 가장 최근 기록 기준 요약(원화 입력값, 달러는 ÷ 환율). 매입 = (총자산−예수금) − 손익 */
+function manualAccountView(m, cur, fx){
+  const e = m.entries.slice().sort((a,b) => a.date.localeCompare(b.date)).pop();
+  if(!e) return null;
+  const k = cur === 'KRW' ? 1 : 1 / fx;
+  const ev = (e.total - e.cash) * k, pl = e.pl * k, buy = ev - pl;
+  // 엑셀로 가져온 종목(최근 기록)이 있으면 종목 목록으로. 손익 = 평가 − 매입(수량×매입가, 수수료 제외)
+  const holdings = (Array.isArray(e.holdings) ? e.holdings : []).map(h => {
+    const hev = h.eval * k, hbuy = h.buy * k;
+    return { code:h.code, name:h.name, market:'KR', nativeCur:'KRW', qty:h.qty, eval:hev, buy:hbuy, pl:hev - hbuy,
+             price:h.price * k, avg:h.avg * k, rate: hbuy ? (hev - hbuy) / hbuy * 100 : 0, acctId:'manual:' + m.id, acctName:m.name };
+  });
+  return { id:m.id, name:m.name, source:'manual', order:900, holdings, asOf:e.date,
+           eval:ev, buy, pl, cash:e.cash * k, total:e.total * k, rate: buy ? pl / buy * 100 : 0 };
+}
+
+/* ----- 3-1. 선택 범위 (탭 띠 '계좌' 선택) ----- */
+/** 계좌 키: API 계좌는 id, 수동 계좌는 'manual:'+id (추이 계열 id 와 같은 형식) */
+const acctKey = a => a.source === 'manual' ? 'manual:' + a.id : a.id;
+
+/** 선택 범위 → 계좌 키 Set. 전체면 null. 'grp:ID' = 내 그룹 구성원, 그 외 = 계좌 키 하나. 없는 그룹이면 빈 Set */
+function scopeIds(){
+  const f = state.filter;
+  if(!f || f === 'all') return null;
+  if(f.startsWith('grp:')){
+    const g = state.groups.find(x => 'grp:' + x.id === f);
+    return new Set(g ? g.members : []);
+  }
+  return new Set([f]);
+}
+
+/** 계좌 키 → 표시 이름 (API: 최신 스냅샷, 수동: 입력 이름) */
+function keyName(k){
+  if(k.startsWith('manual:')){ const mm = state.manual.find(x => 'manual:' + x.id === k); return mm ? mm.name : k; }
+  const a = LATEST && LATEST.accounts.find(x => x.id === k);
+  return a ? a.name : k;
+}
+
+/** 추이·비중 변화·배당 범위: 계좌 그룹(헤더) 안 + 선택 범위 안. 입력: 계좌 id, 수동 여부 */
+function inScope(id, isManual){
+  if(!inGroup(id, isManual)) return false;
+  const S = scopeIds();
+  return !S || S.has(isManual ? 'manual:' + id : id);
+}
+
+/**
+ * 현황 탭용 선택 범위 요약. 입력: buildModel 결과
+ * 출력: {S, accounts(범위 안 계좌), tot(합계), single(계좌 하나면 그 계좌), label(제목에 붙일 이름)}
+ */
+function scopeView(m){
+  const S = scopeIds();
+  const accounts = S ? m.accounts.filter(a => S.has(acctKey(a))) : m.accounts;
+  const sum = k => accounts.reduce((s, a) => s + a[k], 0);
+  const tot = { total:sum('total'), eval:sum('eval'), buy:sum('buy'), pl:sum('pl'), cash:sum('cash') };
+  tot.rate = tot.buy ? tot.pl / tot.buy * 100 : 0;
+  const single = S && accounts.length === 1 ? accounts[0] : null;
+  let label = '';
+  if(S) label = state.filter.startsWith('grp:') ? (state.groups.find(g => 'grp:' + g.id === state.filter) || {}).name || '' : (single ? single.name : '');
+  return { S, accounts, tot, single, label };
+}
+
+/** 선택 범위 바꾸기(저장 후 다시 그림). 입력: 'all' | 계좌 키 | 'grp:'+id */
+function setFilter(v){
+  state.filter = v || 'all';
+  save('filter', state.filter);
+  render();
+}
+
+/** 선택 드롭다운 옵션 HTML(탭 띠·보유 종목 공용): 전체 / 내 그룹(헤더 그룹 안에 구성원이 있는 것) / 계좌 */
+function scopeOptionsHtml(m){
+  const keys = new Set(m.accounts.map(acctKey));
+  const opt = (v, t) => `<option value="${esc(v)}"${v === state.filter ? ' selected' : ''}>${esc(t)}</option>`;
+  const grps = state.groups.filter(g => g.members.some(k => keys.has(k)));
+  return opt('all', '전체') +
+    (grps.length ? '<optgroup label="내 그룹">' + grps.map(g => opt('grp:' + g.id, g.name)).join('') + '</optgroup>' : '') +
+    '<optgroup label="계좌">' + m.accounts.map(a => opt(acctKey(a), a.name + (a.source === 'manual' ? ' (수동)' : ''))).join('') + '</optgroup>';
+}
+
+/** 계좌가 현재 선택한 그룹(헤더 전체/국내/해외)에 속하는지. 입력: 계좌 id, 수동 여부 / '전체'는 항상 true */
+function inGroup(id, isManual){
+  if(state.group === 'all') return true;
+  const g = isManual ? CONFIG.MANUAL_GROUP : CONFIG.ACCOUNT_GROUPS[id];
+  return g === state.group;
+}
+
+/** 화면 전체 모델: 선택 그룹의 계좌 목록, 합계(비중% 분모), 종목 목록 */
+function buildModel(cur){
+  const fx = fxOf(LATEST);
+  const accounts = [];
+  if(LATEST) LATEST.accounts.filter(a => inGroup(a.id, false)).forEach(a => accounts.push(apiAccountView(a, cur, fx)));
+  state.manual.filter(m => inGroup(m.id, true)).forEach(m => { const v = manualAccountView(m, cur, fx); if(v) accounts.push(v); });
+  accounts.sort((a,b) => a.order - b.order);
+  const sum = k => accounts.reduce((s, a) => s + a[k], 0);
+  const tot = { total:sum('total'), eval:sum('eval'), buy:sum('buy'), pl:sum('pl'), cash:sum('cash') };
+  tot.rate = tot.buy ? tot.pl / tot.buy * 100 : 0;
+  accounts.forEach(a => a.weight = tot.total ? a.total / tot.total * 100 : 0);
+  return { fx, accounts, tot };
+}
+
+/** 직전 스냅샷 대비 API 계좌 총자산 변화(선택 그룹·통화, 각 스냅샷 자기 환율로 환산). 없으면 null */
+function prevChange(cur, S){
+  if(!PREV) return null;
+  // S(계좌 키 Set)를 주면 그 안의 API 계좌만, 없으면 선택 그룹 API 계좌 전체
+  const totalOf = snap => snap.accounts.filter(a => inGroup(a.id, false) && (!S || S.has(a.id)))
+    .reduce((s, a) => s + apiAccountView(a, cur, fxOf(snap)).total, 0);
+  const now = totalOf(LATEST), before = totalOf(PREV);
+  return { diff: now - before, rate: before ? (now - before) / before * 100 : 0, date: PREV.date };
+}
+
+/** 같은 종목(code) 합치기: 수량·금액 합, 평균단가 = 매입금액 ÷ 수량 */
+function mergeHoldings(list){
+  const map = new Map();
+  list.forEach(h => {
+    const m = map.get(h.code);
+    if(!m){ map.set(h.code, Object.assign({}, h, { accts:[h.acctName] })); return; }
+    m.qty += h.qty; m.eval += h.eval; m.buy += h.buy; m.pl += h.pl;
+    if(!m.accts.includes(h.acctName)) m.accts.push(h.acctName);
+  });
+  return [...map.values()].map(m => {
+    m.avg = m.qty ? m.buy / m.qty : 0;
+    m.rate = m.buy ? m.pl / m.buy * 100 : 0;
+    m.acctName = m.accts.length > 1 ? m.accts.length + '개 계좌' : m.accts[0];
+    return m;
+  });
+}
+
+/* ----- 3-2. 자산 추이 계산 ----- */
+/**
+ * 날짜의 원/달러 환율. 우선순위: ① 그날 API 스냅샷 환율 ② 과거 환율 이력 중 그날 이전 가장 가까운 값
+ * ③ 이력 첫 값(이력 시작 전 날짜) ④ 최신 스냅샷 환율. 없으면 null
+ */
+function fxAt(date){
+  const s = SNAPS.find(x => x.date === date);
+  if(s && fxOf(s)) return fxOf(s);
+  let lo = 0, hi = FX_DATES.length - 1, ans = -1;   // 이진 탐색: date 이하 마지막 날짜
+  while(lo <= hi){ const mid = (lo + hi) >> 1; if(FX_DATES[mid] <= date){ ans = mid; lo = mid + 1; } else hi = mid - 1; }
+  if(ans >= 0) return FX_HIST[FX_DATES[ans]];
+  if(FX_DATES.length) return FX_HIST[FX_DATES[0]];
+  return fxOf(LATEST);
+}
+
+/** 원화/달러 기록 1건을 표시 통화로. 입력: {eval,buy,pl,cash}, 기록 통화, 표시 통화, 날짜 → {total,eval,buy,pl,cash} */
+function convertPoint(p, nativeCur, cur, date){
+  let k = 1;
+  if(nativeCur !== cur){
+    const fx = fxAt(date);
+    k = nativeCur === 'USD' ? fx : 1 / fx;      // 달러→원: ×환율, 원→달러: ÷환율
+  }
+  return { date, eval:p.eval * k, buy:p.buy * k, pl:p.pl * k, cash:p.cash * k, total:(p.eval + p.cash) * k };
+}
+
+/**
+ * 선택 그룹 계좌마다 날짜별 기록(표시 통화)을 모음.
+ * 출력: [{id, name, order, points:[{date,total,eval,buy,pl,cash}] (날짜순)}]
+ * API 계좌 = 001 이력(첫 API 스냅샷 이전만) + API 스냅샷. 수동 계좌 = 입력 기록(원화).
+ */
+function accountSeries(cur){
+  const map = new Map();
+  const get = (id, name, order) => {
+    if(!map.has(id)) map.set(id, { id, name, order, points:[] });
+    return map.get(id);
+  };
+  // API 스냅샷
+  SNAPS.forEach(snap => snap.accounts.forEach(a => {
+    if(!inScope(a.id, false)) return;
+    const v = apiAccountView(a, cur, fxOf(snap));
+    get(a.id, a.name, a.order).points.push({ date:snap.date, total:v.total, eval:v.eval, buy:v.buy, pl:v.pl, cash:v.cash });
+  }));
+  // 001 이력 (API 계좌)
+  Object.entries(state.legacy.accounts || {}).forEach(([key, L]) => {
+    if(key.startsWith('manual:') || !inScope(key, false)) return;
+    const s = get(key, (map.get(key) || {}).name || L.name, (map.get(key) || {}).order || 50);
+    const firstApi = s.points.length ? s.points[0].date : '9999-12-31';
+    L.points.filter(p => p.date < firstApi).forEach(p => s.points.push(convertPoint(p, L.currency, cur, p.date)));
+  });
+  // 수동 계좌
+  state.manual.filter(m => inScope(m.id, true)).forEach(m => {
+    const s = get('manual:' + m.id, m.name, 900);
+    m.entries.forEach(e => s.points.push(convertPoint({ eval:e.total - e.cash, buy:e.total - e.cash - e.pl, pl:e.pl, cash:e.cash }, 'KRW', cur, e.date)));
+  });
+  const list = [...map.values()].filter(s => s.points.length);
+  list.forEach(s => s.points.sort((a, b) => a.date.localeCompare(b.date)));
+  return list.sort((a, b) => a.order - b.order);
+}
+
+/**
+ * 날짜 축 맞추기: 모든 계좌 기록 날짜의 합집합에 대해, 계좌별 '그 날짜 이전 마지막 기록'을 채움(기록 전이면 null).
+ * 출력: {dates:[...], rows:{계좌id:[point|null,...]}}
+ */
+function alignSeries(series){
+  const dates = [...new Set(series.flatMap(s => s.points.map(p => p.date)))].sort();
+  const rows = {};
+  series.forEach(s => {
+    let i = -1;
+    rows[s.id] = dates.map(d => {
+      while(i + 1 < s.points.length && s.points[i + 1].date <= d) i++;
+      return i >= 0 ? s.points[i] : null;
+    });
+  });
+  return { dates, rows };
+}
+
+/** 기간 필터 시작일. 입력: 마지막 날짜, 개월 수(0=전체) → 'YYYY-MM-DD' 또는 '' */
+function rangeStart(lastDate, months){
+  if(!months || !lastDate) return '';
+  const d = new Date(Date.UTC(+lastDate.slice(0, 4), +lastDate.slice(5, 7) - 1 - months, +lastDate.slice(8, 10)));
+  return d.toISOString().slice(0, 10);   // UTC 기준이라 시간대 영향 없음
+}
+/**
+ * 자산 추이·비중 변화 기간. 입력: 기록 날짜 목록(오름차순), 기간(개월 수 / 0=전체 / 'ytd' / 'y2025') → {start, end}
+ * YTD·연도: 그해 1월 1일 직전 마지막 기록(전년 말 값)부터 그해 12월 31일까지 → 그해 변화의 기준점. 전년 기록이 없으면 1월 1일.
+ * 예: 기록 [2025-12-28, 2026-01-03, …], 'ytd' → {start:'2025-12-28', end:'2026-12-31'}
+ */
+function periodRange(dates, range){
+  const last = dates[dates.length - 1];
+  if(!last) return { start:'', end:'' };
+  const yr = range === 'ytd' ? last.slice(0, 4) : (/^y\d{4}$/.test(String(range)) ? String(range).slice(1) : null);
+  if(yr){
+    const jan1 = yr + '-01-01';
+    const before = dates.filter(d => d < jan1);
+    return { start: before.length ? before[before.length - 1] : jan1, end: yr + '-12-31' };
+  }
+  return { start: rangeStart(last, +range), end: '9999-12-31' };
+}
+const dayNum = s => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;   // 날짜→일련번호(x축)
+const dayStr = n => new Date(n * 864e5).toISOString().slice(0, 10);
+
+/* ----- 3-3. 비중 변화 계산 (종목 구성) ----- */
+/** 같은 종목 판별 키: 종목코드/티커 대문자. 예: 'abcd' → 'ABCD', '123456' */
+const holdingKey = (code, name) => String(code || name || '').trim().toUpperCase();
+
+/** 001 종목 이력 → 날짜별 [{key,name,value}] 맵 (값은 기록 통화 그대로, 0 이하는 제외) */
+function legacyHoldingsByDate(L){
+  const byDate = new Map();
+  (L.holdings || []).forEach(h => (h.history || []).forEach(x => {
+    if(!(x.value > 0)) return;
+    if(!byDate.has(x.date)) byDate.set(x.date, []);
+    byDate.get(x.date).push({ key: holdingKey(h.ticker, h.name), name: h.name, value: x.value });
+  }));
+  return byDate;
+}
+
+/** 통화 환산 배율. 입력: 기록 통화, 표시 통화, 날짜 → 곱할 값 */
+function convFactor(nativeCur, cur, date){
+  if(nativeCur === cur) return 1;
+  const fx = fxAt(date);
+  return nativeCur === 'USD' ? fx : 1 / fx;
+}
+
+/**
+ * 선택 그룹 계좌마다 날짜별 구성(종목별 금액 + 예수금, 표시 통화).
+ * 출력: [{id, name, order, points:[{date, items:[{key,name,value}], cash}]}]
+ * 출처 우선순위는 accountSeries 와 같음(API > 001 이력, 수동 계좌는 입력 기록).
+ * 종목을 모르면 '계좌명 (종목 미입력)' 한 항목으로 넣음.
+ */
+function accountComps(cur){
+  const map = new Map();
+  const get = (id, name, order) => { if(!map.has(id)) map.set(id, { id, name, order, points:[] }); return map.get(id); };
+  const unknownItem = (id, name, value) => ({ key:'ACCT:' + id, name: name + ' (종목 미입력)', value });
+
+  SNAPS.forEach(snap => snap.accounts.forEach(a => {
+    if(!inScope(a.id, false)) return;
+    const v = apiAccountView(a, cur, fxOf(snap));
+    get(a.id, a.name, a.order).points.push({ date:snap.date, cash:v.cash,
+      items: v.holdings.map(h => ({ key:holdingKey(h.code, h.name), name:h.name, value:h.eval })) });
+  }));
+  Object.entries(state.legacy.accounts || {}).forEach(([key, L]) => {
+    if(key.startsWith('manual:') || !inScope(key, false)) return;
+    const s = get(key, (map.get(key) || {}).name || L.name, (map.get(key) || {}).order || 50);
+    const firstApi = s.points.length ? s.points[0].date : '9999-12-31';
+    const byDate = legacyHoldingsByDate(L);
+    L.points.filter(p => p.date < firstApi).forEach(p => {
+      const k = convFactor(L.currency, cur, p.date);
+      const items = (byDate.get(p.date) || []).map(x => ({ key:x.key, name:x.name, value:x.value * k }));
+      s.points.push({ date:p.date, cash:p.cash * k, items: items.length ? items : [unknownItem(key, s.name, p.eval * k)] });
+    });
+  });
+  state.manual.filter(m => inScope(m.id, true)).forEach(m => {
+    const s = get('manual:' + m.id, m.name, 900);
+    const L = state.legacy.accounts['manual:' + m.id];
+    const byDate = L ? legacyHoldingsByDate(L) : new Map();
+    m.entries.forEach(e => {
+      const k = convFactor('KRW', cur, e.date);
+      let items;
+      if(Array.isArray(e.holdings) && e.holdings.length) items = e.holdings.map(h => ({ key:holdingKey(h.code, h.name), name:h.name, value:h.eval * k }));
+      else if(byDate.has(e.date)) items = byDate.get(e.date).map(x => ({ key:x.key, name:x.name, value:x.value * k }));
+      else items = [unknownItem(m.id, m.name, (e.total - e.cash) * k)];
+      s.points.push({ date:e.date, cash:e.cash * k, items });
+    });
+  });
+  const list = [...map.values()].filter(s => s.points.length);
+  list.forEach(s => s.points.sort((a, b) => a.date.localeCompare(b.date)));
+  return list.sort((a, b) => a.order - b.order);
+}
+
+/**
+ * 날짜별 비중 표 만들기.
+ * 입력: 모드('holding'|'account'), 표시 통화 / 출력: {dates, keys:[{key,name}], share:{key:[%...]}} (기간 필터 전 전체)
+ * 비중(%) = 항목 금액 ÷ 그날 총자산(종목 + 예수금) × 100. 예수금은 key '__CASH'.
+ */
+function weightTable(mode, cur){
+  const series = mode === 'account' ? accountSeries(cur) : accountComps(cur);
+  const { dates, rows } = alignSeries(series);
+  const names = new Map(), values = new Map();   // key → 이름, key → [날짜별 금액]
+  const add = (key, name, i, v) => {
+    if(!values.has(key)){ values.set(key, new Array(dates.length).fill(0)); }
+    if(name) names.set(key, name);                 // 나중 기록 이름으로 갱신(최신 이름)
+    values.get(key)[i] += v;
+  };
+  dates.forEach((d, i) => series.forEach(s => {
+    const p = rows[s.id][i]; if(!p) return;
+    if(mode === 'account') add(s.id, s.name, i, p.total);
+    else { p.items.forEach(it => add(it.key, it.name, i, it.value)); add('__CASH', '예수금', i, p.cash); }
+  }));
+  const totals = dates.map((d, i) => [...values.values()].reduce((s, arr) => s + arr[i], 0));
+  const share = {};
+  values.forEach((arr, key) => share[key] = arr.map((v, i) => totals[i] ? v / totals[i] * 100 : 0));
+  return { dates, keys: [...values.keys()].map(key => ({ key, name: names.get(key) || key })), share };
+}
+
+/* ----- 3-4. 배당 계산 ----- */
+/**
+ * 배당·이자 기록 1건 → 표시 통화의 {gross(세전), tax(세금), net(세후), est(세전 추정 여부)}.
+ * 국내: 세전 = 금액, 세후 = 금액 − 세금. 해외 배당: 입금액이 미국 원천징수 후(추정) → 세전 = 입금액 ÷ (1 − 원천징수율).
+ *   국내 세금이 따로 떼인 해외 건(일부 단기채 ETF 등)은 미국 원천징수 없음으로 보고 세전 = 입금액.
+ * 세금환급: 세전 0(세전에는 원래 세금이 이미 포함), 세후 = 환급액.
+ * 예: 국내 ETF분배금 11,330 / 세금 1,730 → 세후 9,600. 해외 $85.00 입금 → 세전 $100.00(추정), 세금 $15.00
+ */
+function incomeView(r, cur){
+  const k = convFactor(r.cur, cur, r.date);          // 기록 통화 → 표시 통화 (지급일 환율)
+  const kTax = convFactor('KRW', cur, r.date);        // 세금합계는 항상 원화
+  const amt = r.amt * k, taxKrw = (r.tax_krw || 0) * kTax;
+  if(r.kind === 'refund') return { gross:0, tax:0, net:amt, est:false };
+  if(r.kind === 'div' && r.cur !== 'KRW' && !(r.tax_krw > 0)){
+    const gross = amt / (1 - CONFIG.US_WITHHOLD_RATE);
+    return { gross, tax:gross - amt, net:amt, est:true };
+  }
+  return { gross:amt, tax:taxKrw, net:amt - taxKrw, est:false };
+}
+
+/**
+ * 선택 그룹(API 계좌)의 배당·이자 기록을 표시 통화로 변환한 목록.
+ * 출력: [{...원본, key(종목 키), view:{gross,tax,net,est}, v(세전/세후 선택값)}] (날짜순)
+ */
+function incomeRows(cur){
+  const mode = state.divTax;
+  return INCOME.filter(r => inScope(r.acct, false)).map(r => {
+    const view = incomeView(r, cur);
+    return Object.assign({}, r, { key: holdingKey(r.ticker || r.code, r.name), view, v: mode === 'net' ? view.net : view.gross });
+  });
+}
+
+/** 'YYYY-MM' 목록 만들기. 입력: 시작 월, 끝 월 → 사이 모든 월(포함) */
+function monthList(from, to){
+  const out = [];
+  let y = +from.slice(0, 4), m = +from.slice(5, 7);
+  while(`${y}-${String(m).padStart(2, '0')}` <= to){
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    if(++m > 12){ m = 1; y++; }
+  }
+  return out;
+}
+
+/** 계좌 id → {name, order} (최신 스냅샷 기준, 없으면 id) */
+function acctInfo(id){
+  const a = LATEST && LATEST.accounts.find(x => x.id === id);
+  return a ? { name:a.name, order:a.order } : { name:id, order:50 };
+}
+
+/* ===== 4. 포맷 ===== */
+const curDigits = cur => cur === 'USD' ? 2 : 0;
+/** 금액. 입력: 값, 통화, 단위표시 여부 → '1,234,567원' / '$1,234.56' */
+function money(v, cur, unit){
+  const d = curDigits(cur);
+  const s = Math.abs(v).toLocaleString('ko-KR', { minimumFractionDigits:d, maximumFractionDigits:d });
+  const sign = v < 0 ? '−' : '';
+  if(!unit) return sign + s;
+  return cur === 'USD' ? sign + '$' + s : sign + s + '원';
+}
+const signed = (v, cur, unit) => (v > 0 ? '+' : '') + money(v, cur, unit);
+const pct = (v, d = 2) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(d) + '%';
+const plain = v => v.toFixed(1) + '%';
+const cls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+/** 단가: 원화 정수, 달러 소수 2자리 */
+const price = (v, cur) => v.toLocaleString('ko-KR', { minimumFractionDigits:curDigits(cur), maximumFractionDigits:curDigits(cur) });
+const qtyFmt = q => Number.isInteger(q) ? q.toLocaleString('ko-KR') : q.toLocaleString('ko-KR', { maximumFractionDigits:4 });
+const unitLabel = cur => cur === 'USD' ? '($)' : '(원)';
+/** HTML 이스케이프(종목명·계좌명 등 외부 문자열) */
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+/* ===== 5. 렌더 ===== */
+function render(){
+  const cur = state.currency;
+  const model = buildModel(cur);
+  // 선택 범위 검증: 헤더 그룹 안에 해당 계좌가 하나도 없으면(그룹 변경·삭제된 계좌/그룹) 전체로
+  model.scope = scopeView(model);
+  if(model.scope.S && !model.scope.accounts.length){ state.filter = 'all'; save('filter', 'all'); model.scope = scopeView(model); }
+  const sv = model.scope;
+  // 탭 띠 계좌 드롭다운. 관리 탭에서는 숨김
+  const chip = document.getElementById('filterChip');
+  chip.classList.toggle('hidden', state.tab === 'manage');
+  chip.classList.toggle('on', !!sv.S);
+  document.getElementById('filterClear').classList.toggle('hidden', !sv.S);
+  const optHtml = scopeOptionsHtml(model);
+  document.getElementById('acctSel').innerHTML = optHtml;
+  document.getElementById('acctFilter').innerHTML = optHtml;
+  ['trendTitle', 'weightTitle', 'divTitle'].forEach(id => {
+    const el = document.getElementById(id);
+    el.textContent = el.dataset.base + (sv.label ? ' · ' + sv.label : '');
+  });
+  renderHeader(model);
+  renderSummary(model, cur);
+  renderAccounts(model, cur);
+  renderHoldings(model, cur);
+  renderManual();
+  renderGroups();
+  renderCharts(model, cur);
+  renderTrend(cur);
+  renderWeights(cur);
+  renderDividends(model, cur);
+}
+
+function renderHeader(model){
+  document.getElementById('asof').textContent = LATEST
+    ? `기준 ${LATEST.fetched_at.replace('T', ' ').slice(0, 16)}` + (model.fx ? ` · USD ${model.fx.toLocaleString('ko-KR', {maximumFractionDigits:2})}원` : '')
+    : '';
+  document.querySelectorAll('#curSeg button').forEach(b => b.classList.toggle('on', b.dataset.cur === state.currency));
+  document.querySelectorAll('#groupSeg button').forEach(b => b.classList.toggle('on', b.dataset.group === state.group));
+  document.querySelectorAll('#trendModeSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === state.trendMode));
+  document.querySelectorAll('#trendMetricSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === state.trendMetric));
+  document.querySelectorAll('#trendRangeSeg button').forEach(b => b.classList.toggle('on', String(b.dataset.v) === String(state.trendRange)));
+  document.querySelectorAll('#weightModeSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === state.weightMode));
+  document.querySelectorAll('#divTaxSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === state.divTax));
+  document.querySelectorAll('#divRangeSeg button').forEach(b => b.classList.toggle('on', String(b.dataset.v) === String(state.divRange)));
+  const nLegacy = Object.keys(state.legacy.accounts || {}).length;
+  document.getElementById('legacyInfo').textContent = nLegacy
+    ? `001 이력: ${nLegacy}개 계좌 (가져온 날 ${String(state.legacy.importedAt || '').slice(0, 10)})` : '';
+  document.querySelectorAll('#pieSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === state.pieMode));
+  document.getElementById('themeBtn').textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '라이트' : '다크';
+  document.getElementById('rateNote').textContent = state.currency === 'KRW'
+    ? '원화 수익률: 해외 종목은 매입 당시 환율 기준(환차손익 포함)'
+    : '달러 수익률: 미국 종목은 달러 기준(환차손익 제외), 국내 종목은 당일 환율 환산';
+}
+
+function renderSummary(m, cur){
+  // 선택 범위(계좌·내 그룹)가 있으면 그 합계, 아니면 헤더 그룹 합계
+  const sv = m.scope, t = sv.S ? sv.tot : m.tot;
+  const hasApi = sv.accounts.some(a => a.source === 'api');
+  const ch = hasApi ? prevChange(cur, sv.S) : null;
+  const chHtml = ch
+    ? `<span class="${cls(ch.diff)}">${signed(ch.diff, cur, true)} (${pct(ch.rate)})</span> · ${ch.date.slice(5)} 대비` + (sv.accounts.some(a => a.source === 'manual') ? ' (API 계좌만)' : '')
+    : hasApi ? '직전 기록 없음 (내일부터 표시)' : '수동 계좌는 직전 대비 없음';
+  const gl = sv.S ? ` · ${sv.label}` : state.group === 'all' ? '' : ` · ${CONFIG.GROUP_LABEL[state.group]} 계좌`;
+  const cards = [
+    ['총자산' + gl, money(t.total, cur, true), chHtml],
+    ['평가손익' + (sv.S ? gl : ''), `<span class="${cls(t.pl)}">${signed(t.pl, cur, true)}</span>`, `<span class="${cls(t.rate)}">${pct(t.rate)}</span> · 매입 ${money(t.buy, cur, true)}`],
+    ['평가금액', money(t.eval, cur, true), `비중 ${t.total ? plain(t.eval / t.total * 100) : '-'}`],
+    ['예수금', money(t.cash, cur, true), `비중 ${t.total ? plain(t.cash / t.total * 100) : '-'}`]
+  ];
+  document.getElementById('summary').innerHTML = cards.map(c =>
+    `<div class="stat"><div class="lbl">${c[0]}</div><div class="val">${c[1]}</div><div class="sub">${c[2]}</div></div>`).join('');
+}
+
+function renderAccounts(m, cur){
+  const u = unitLabel(cur);
+  const rows = m.accounts.map(a => {
+    const tag = a.source === 'api' ? '<span class="tag api">API</span>' : `<span class="tag manual">수동 ${esc(a.asOf.slice(5))}</span>`;
+    const sel = m.scope.S && m.scope.S.has(acctKey(a)) ? ' sel' : '';
+    const click = ` class="click${sel}" data-acct="${esc(acctKey(a))}"`;
+    return `<tr${click}>
+      <td>${esc(a.name)}</td>
+      <td class="num">${money(a.total, cur)}</td>
+      <td class="num"><span class="bar" style="width:${Math.max(2, a.weight * 0.6)}px"></span>${plain(a.weight)}</td>
+      <td class="num col-opt">${money(a.eval, cur)}</td>
+      <td class="num ${cls(a.pl)}">${signed(a.pl, cur)}</td>
+      <td class="num ${cls(a.rate)}">${pct(a.rate)}</td>
+      <td class="num col-opt">${money(a.cash, cur)}</td>
+      <td>${tag}</td></tr>`;
+  }).join('');
+  const t = m.tot;
+  document.getElementById('acctTable').innerHTML = `
+    <thead><tr><th>계좌</th><th class="num">총자산${u}</th><th class="num">비중</th><th class="num col-opt">평가금액${u}</th>
+      <th class="num">평가손익${u}</th><th class="num">수익률</th><th class="num col-opt">예수금${u}</th><th>출처</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="8" class="muted">계좌가 없습니다</td></tr>'}
+    <tr class="total click" data-acct="all" title="전체 기준으로 보기"><td>합계</td><td class="num">${money(t.total, cur)}</td><td class="num">100%</td>
+      <td class="num col-opt">${money(t.eval, cur)}</td><td class="num ${cls(t.pl)}">${signed(t.pl, cur)}</td>
+      <td class="num ${cls(t.rate)}">${pct(t.rate)}</td><td class="num col-opt">${money(t.cash, cur)}</td><td></td></tr></tbody>`;
+}
+
+/** 보유 종목 표용 목록(필터·합치기·정렬 반영) */
+function holdingRows(m){
+  // 선택 범위 안 계좌의 종목(API + 엑셀로 종목을 기록한 수동 계좌). 계좌 하나면 합치기 안 함
+  let list = m.scope.accounts.flatMap(a => a.holdings);
+  if(!m.scope.single && state.merge) list = mergeHoldings(list);
+  const k = state.sort.key, d = state.sort.dir;
+  list.sort((a, b) => {
+    const x = a[k], y = b[k];
+    return (typeof x === 'string' ? x.localeCompare(y, 'ko') : x - y) * d;
+  });
+  return list;
+}
+
+function renderHoldings(m, cur){
+  // 계좌 선택 드롭다운은 render()에서 탭 띠와 같은 옵션으로 채움
+  const sv = m.scope;
+  const mergeChk = document.getElementById('mergeChk');
+  mergeChk.checked = state.merge; mergeChk.disabled = !!sv.single;
+
+  // 비중 % 분모: 선택 범위 총자산(전체면 헤더 그룹 총자산)
+  const u = unitLabel(cur), total = sv.tot.total;
+  const cols = [ // [키, 제목, 숫자열 여부, 좁은 화면 숨김]
+    ['name','종목',false,false], ['acctName','계좌',false,true], ['qty','수량',true,true],
+    ['avg','평균단가'+u,true,true], ['price','현재가'+u,true,false], ['eval','평가금액'+u,true,false],
+    ['pl','평가손익'+u,true,false], ['rate','수익률',true,false], ['eval', sv.single ? '계좌 내 비중' : sv.S ? '선택 내 비중' : '비중',true,true]
+  ];
+  const arrow = k => state.sort.key === k ? (state.sort.dir < 0 ? ' ▾' : ' ▴') : '';
+  const head = cols.map((c, i) => `<th class="sortable${c[2] ? ' num' : ''}${c[3] ? ' col-opt' : ''}" data-sort="${c[0]}">${c[1]}${i === 8 ? '' : arrow(c[0])}</th>`).join('');
+  const list = holdingRows(m);
+  const body = list.map(h => `<tr>
+      <td>${esc(h.name)}<span class="code">${esc(h.code)}</span></td>
+      <td class="col-opt">${esc(h.acctName)}</td>
+      <td class="num col-opt">${qtyFmt(h.qty)}</td>
+      <td class="num col-opt">${price(h.avg, cur)}</td>
+      <td class="num">${price(h.price, cur)}</td>
+      <td class="num">${money(h.eval, cur)}</td>
+      <td class="num ${cls(h.pl)}">${signed(h.pl, cur)}</td>
+      <td class="num ${cls(h.rate)}">${pct(h.rate)}</td>
+      <td class="num col-opt">${total ? plain(h.eval / total * 100) : '-'}</td></tr>`).join('');
+  document.getElementById('holdTable').innerHTML = `<thead><tr>${head}</tr></thead>
+    <tbody>${body || '<tr><td colspan="9" class="muted">보유 종목이 없습니다</td></tr>'}</tbody>`;
+}
+
+function renderManual(){
+  const rows = state.manual.map(mm => {
+    const e = mm.entries.slice().sort((a,b) => a.date.localeCompare(b.date)).pop();
+    if(!e) return '';
+    return `<tr class="click" data-manual="${esc(mm.id)}">
+      <td>${esc(mm.name)}</td><td>${esc(e.date)}</td>
+      <td class="num">${money(e.total, 'KRW')}</td><td class="num col-opt">${money(e.cash, 'KRW')}</td>
+      <td class="num ${cls(e.pl)}">${signed(e.pl, 'KRW')}</td><td class="num col-opt">${mm.entries.length}</td>
+      <td><button class="btn-text" data-del="${esc(mm.id)}">삭제</button></td></tr>`;
+  }).join('');
+  document.getElementById('manualTable').innerHTML = `
+    <thead><tr><th>계좌</th><th>최근 기준일</th><th class="num">총자산(원)</th><th class="num col-opt">예수금(원)</th>
+      <th class="num">평가손익(원)</th><th class="num col-opt">기록 수</th><th></th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="7" class="muted">아직 없습니다. 아래에 입력 후 [기록]</td></tr>'}</tbody>`;
+  document.getElementById('mNames').innerHTML = state.manual.map(mm => `<option value="${esc(mm.name)}">`).join('');
+}
+
+/* ----- 차트 (Chart.js). 색은 CSS 변수에서 읽어 테마 전환 시 다시 그림 ----- */
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function renderCharts(m, cur){
+  const pieBox = document.getElementById('pieChart').parentElement;
+  const barBox = document.getElementById('barChart').parentElement;
+  if(typeof Chart === 'undefined'){
+    const msg = '<div class="chart-fallback">차트 라이브러리(Chart.js)를 불러오지 못했습니다. 인터넷 연결을 확인하세요. 표는 정상 동작합니다.</div>';
+    pieBox.innerHTML = msg; barBox.innerHTML = msg; return;
+  }
+  const text = cssVar('--text'), muted = cssVar('--muted'), border = cssVar('--border'), panel = cssVar('--panel');
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = muted;
+  const fmtTip = v => money(v, cur, true);
+
+  // 도넛: 선택 범위 기준. 계좌 하나면 그 계좌 종목 구성(계좌별/종목별 버튼 숨김)
+  //   계좌별 = 범위 안 계좌 총자산 / 종목별 = 같은 종목 합산 상위 N + 기타 + 종목 미입력(수동) + 예수금
+  const sv = m.scope, accts = sv.accounts;
+  const pieMode = sv.single ? 'holding' : state.pieMode;
+  document.getElementById('pieSeg').classList.toggle('hidden', !!sv.single);
+  document.getElementById('pieTitle').textContent = '자산 비중' + (sv.label ? ' · ' + sv.label : '');
+  document.getElementById('barTitle').textContent = '상위 종목' + (sv.label ? ' · ' + sv.label : '');
+  const holdAll = accts.flatMap(a => a.holdings);
+  const holdList = (sv.single ? holdAll.slice() : mergeHoldings(holdAll)).sort((a, b) => b.eval - a.eval);
+  const NO_HOLD = '종목 미입력(수동)';
+  let labels, values;
+  if(pieMode === 'account'){
+    labels = accts.map(a => a.name); values = accts.map(a => a.total);
+  }else{
+    const top = holdList.slice(0, CONFIG.PIE_TOP_N), rest = holdList.slice(CONFIG.PIE_TOP_N);
+    labels = top.map(h => h.name); values = top.map(h => h.eval);
+    const restSum = rest.reduce((s, h) => s + h.eval, 0);
+    if(restSum > 0){ labels.push('기타'); values.push(restSum); }
+    // 종목을 모르는 수동 계좌(총액만 입력)의 평가금액
+    const noHold = accts.filter(a => !a.holdings.length).reduce((s, a) => s + a.eval, 0);
+    if(noHold > 0){ labels.push(NO_HOLD); values.push(noHold); }
+    labels.push('예수금'); values.push(sv.tot.cash);
+  }
+  const colors = labels.map((l, i) => l === '예수금' ? CONFIG.CASH_COLOR : (l === '기타' || l === NO_HOLD) ? CONFIG.ETC_COLOR : CONFIG.PALETTE[i % CONFIG.PALETTE.length]);
+  const total = values.reduce((s, v) => s + v, 0);
+
+  if(charts.pie) charts.pie.destroy();
+  charts.pie = new Chart(document.getElementById('pieChart'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: panel, borderWidth: 2 }] },
+    options: { maintainAspectRatio: false, cutout: '58%',
+      // 계좌별 도넛: 조각 클릭 → 그 계좌 선택(계좌별 현황 행 클릭과 같음)
+      onClick: (evt, els) => {
+        if(pieMode !== 'account' || !els.length) return;
+        const a = accts[els[0].index];
+        if(a) setFilter(acctKey(a));
+      },
+      onHover: (evt, els) => {
+        evt.native.target.style.cursor = (pieMode === 'account' && els.length) ? 'pointer' : 'default';
+        if(pieMode === 'holding') linkHighlight(els.length ? labels[els[0].index] : null, 'pie');
+      },
+      plugins: {
+        // 범례에 마우스 → 같은 종목 연동 강조(종목별 모드)
+        legend: { position: window.innerWidth <= 720 ? 'bottom' : 'right', labels: { color: text, boxWidth: 10, font: { size: 12 } },
+          onHover: pieMode === 'holding' ? (e, item) => linkHighlight(labels[item.index], 'legend') : undefined,
+          onLeave: pieMode === 'holding' ? () => linkHighlight(null, 'legend') : undefined },
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${fmtTip(c.raw)} (${total ? plain(c.raw / total * 100) : '-'})` } }
+      } }
+  });
+
+  // 상위 종목 막대(평가금액)
+  const top = holdList.slice(0, CONFIG.BAR_TOP_N);
+  document.getElementById('barUnit').textContent = '평가금액 ' + unitLabel(cur) + (sv.single ? '' : ' · 같은 종목 합산');
+  // 막대 색 = 순위 색(종목별 도넛의 같은 종목과 같은 색, holdList 순서가 같음)
+  const barColors = top.map((h, i) => CONFIG.PALETTE[i % CONFIG.PALETTE.length]);
+  if(charts.bar) charts.bar.destroy();
+  charts.bar = new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: { labels: top.map(h => h.name), datasets: [{ data: top.map(h => h.eval), backgroundColor: barColors, borderRadius: 3 }] },
+    options: { indexAxis: 'y', maintainAspectRatio: false,
+      onHover: (evt, els) => linkHighlight(els.length ? top[els[0].index].name : null, 'bar'),
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${fmtTip(c.raw)} · 수익률 ${pct(top[c.dataIndex].rate)}` } } },
+      scales: {
+        x: { grid: { color: border }, border: { color: border }, ticks: { color: muted,
+             callback: v => cur === 'USD' ? '$' + (v / 1000).toLocaleString() + 'k' : (v / 1e4).toLocaleString() + '만' } },
+        y: { grid: { display: false }, border: { color: border }, ticks: { color: text, font: { size: 12 } } }
+      } }
+  });
+  // 연동 강조용: 각 차트의 원래 색 + 도넛 연동 여부(계좌별 도넛은 종목이 아니라 제외)
+  link.name = null;
+  link.pie = pieMode === 'holding' ? { chart: charts.pie, colors, labels } : null;
+  link.bar = { chart: charts.bar, colors: barColors, labels: top.map(h => h.name) };
+  ['pieChart', 'barChart'].forEach(id => { document.getElementById(id).onmouseleave = () => linkHighlight(null, 'leave'); });
+}
+
+/* ----- 현황 차트 연동 강조 (v11) ----- */
+/*
+ * 도넛(종목별)·상위 종목 막대 중 한 곳에서 종목에 마우스(모바일은 탭) → 두 차트에서 같은 종목 강조, 나머지는 흐리게.
+ * 같은 종목 판별 = 표시 이름. '기타'·'예수금'·'종목 미입력'은 막대에 없어 도넛에서만 강조.
+ */
+const link = { name: null, pie: null, bar: null };
+const DIM_ALPHA = '33';   // 흐리게 할 때 색 뒤에 붙이는 투명도(16진수 2자리, 33 ≈ 20%)
+/** 입력: 종목 이름(null = 해제), 호출한 곳('pie'·'bar'·'legend'·'leave'). 출력 없음 */
+function linkHighlight(name, from){
+  if(name === link.name) return;
+  link.name = name;
+  [link.pie, link.bar].forEach(t => {
+    if(!t || !t.chart || !t.chart.canvas) return;
+    const i = name == null ? -1 : t.labels.indexOf(name);
+    t.chart.data.datasets[0].backgroundColor = t.colors.map((c, k) => (name == null || k === i) ? c : c + DIM_ALPHA);
+    // 다른 차트(또는 범례에서 온 경우 자기 차트)에는 툴팁·활성 표시도 맞춤
+    const own = (from === 'pie' && t === link.pie) || (from === 'bar' && t === link.bar);
+    if(!own){
+      const act = i >= 0 ? [{ datasetIndex: 0, index: i }] : [];
+      t.chart.setActiveElements(act);
+      const el = i >= 0 ? t.chart.getDatasetMeta(0).data[i] : null;
+      t.chart.tooltip.setActiveElements(act, el ? el.tooltipPosition() : { x: 0, y: 0 });
+    }
+    t.chart.update('none');
+  });
+}
+
+/* ----- 자산 추이 차트 ----- */
+/** 추이 차트. 합계: 총자산+투자원금(금액) 또는 수익률. 계좌별: 누적 면적(금액) 또는 계좌별 수익률 선 */
+function renderTrend(cur){
+  const box = document.getElementById('trendBox'), note = document.getElementById('trendNote');
+  if(charts.trend){ charts.trend.destroy(); charts.trend = null; }
+  if(typeof Chart === 'undefined'){ box.innerHTML = '<div class="chart-fallback">차트 라이브러리를 불러오지 못했습니다.</div>'; return; }
+  if(!box.querySelector('canvas')) box.innerHTML = '<canvas id="trendChart"></canvas>';
+
+  // 계좌 하나만 선택했으면 '계좌별'은 의미가 없어 합계 모드로 고정(저장값 유지), 버튼 숨김
+  const oneAcct = accountSeries(cur).length === 1 && !!scopeIds();
+  const trendMode = oneAcct ? 'total' : state.trendMode;
+  document.getElementById('trendModeSeg').classList.toggle('hidden', oneAcct);
+  const series = accountSeries(cur);
+  const { dates, rows } = alignSeries(series);
+  fillYearSelect('trendYear', [...new Set(dates.map(d => +d.slice(0, 4)))].sort((a, b) => b - a), state.trendRange);
+  const { start, end } = periodRange(dates, state.trendRange);
+  const idx = dates.map((d, i) => i).filter(i => dates[i] >= start && dates[i] <= end);   // 기간 안 날짜의 위치
+  if(idx.length < 2){
+    box.querySelector('canvas').classList.add('hidden');
+    note.innerHTML = '기록이 2개 이상 있어야 추이를 표시합니다. 아래 [001 백업 가져오기]로 과거 이력을 불러오거나, 업데이트를 며칠 실행해 주세요.';
+    return;
+  }
+  box.querySelector('canvas').classList.remove('hidden');
+
+  const text = cssVar('--text'), muted = cssVar('--muted'), border = cssVar('--border'), accent = cssVar('--accent');
+  const isRate = state.trendMetric === 'rate';
+  const xy = (i, y) => ({ x: dayNum(dates[i]), y });
+  const rate = p => p && p.buy ? p.pl / p.buy * 100 : null;
+  let datasets, stacked = false;
+
+  if(trendMode === 'total'){
+    const sumAt = (i, f) => series.reduce((s, a) => { const p = rows[a.id][i]; return s + (p ? f(p) : 0); }, 0);
+    if(isRate){
+      datasets = [{ label:'수익률', data: idx.map(i => { const b = sumAt(i, p => p.buy); return xy(i, b ? sumAt(i, p => p.pl) / b * 100 : null); }),
+        borderColor: accent, backgroundColor: accent }];
+    }else{
+      datasets = [
+        { label:'총자산', data: idx.map(i => xy(i, sumAt(i, p => p.total))), borderColor: accent, backgroundColor: accent },
+        { label:'투자원금(매입+예수금)', data: idx.map(i => xy(i, sumAt(i, p => p.buy + p.cash))), borderColor: muted, backgroundColor: muted, borderDash:[5, 4] }
+      ];
+    }
+  }else{
+    datasets = series.map((s, k) => {
+      const c = CONFIG.PALETTE[k % CONFIG.PALETTE.length];
+      return isRate
+        ? { label:s.name, data: idx.map(i => xy(i, rate(rows[s.id][i]))), borderColor:c, backgroundColor:c }
+        : { label:s.name, data: idx.map(i => xy(i, rows[s.id][i] ? rows[s.id][i].total : 0)), borderColor:c, backgroundColor:c + '59',
+            fill: k === 0 ? 'origin' : '-1' };
+    });
+    stacked = !isRate;
+  }
+  // 점 크기: 기록 많으면 숨김. 계좌별 누적에서 아직 기록 시작 전(값 0)인 점도 숨김
+  const r = idx.length > 60 ? 0 : 2;
+  datasets.forEach(d => Object.assign(d, { borderWidth: 2, tension: 0, spanGaps: false,
+    pointRadius: c => (c.raw && c.raw.y) ? r : 0, pointHoverRadius: c => (c.raw && c.raw.y) ? 4 : 0 }));
+
+  const fmtY = v => isRate ? pct(v) : money(v, cur, true);
+  charts.trend = new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: { datasets },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: {
+        // 계좌별 모드: 범례 클릭 → 그 계좌 선택(기본 동작인 선 숨기기 대신)
+        legend: { labels: { color: text, boxWidth: 10, font: { size: 12 } },
+          onClick: trendMode === 'account' ? (e, item) => { const s = series[item.datasetIndex]; if(s) setFilter(s.id); } : undefined,
+          onHover: trendMode === 'account' ? e => { e.native.target.style.cursor = 'pointer'; } : undefined,
+          onLeave: trendMode === 'account' ? e => { e.native.target.style.cursor = 'default'; } : undefined },
+        tooltip: { callbacks: {
+          title: items => dayStr(items[0].parsed.x),
+          label: c => c.parsed.y == null ? null : ` ${c.dataset.label}: ${fmtY(c.parsed.y)}`,
+          footer: items => (!isRate && stacked) ? '합계: ' + money(items.reduce((s, it) => s + (it.parsed.y || 0), 0), cur, true) : ''
+        } }
+      },
+      scales: {
+        x: { type: 'linear', min: dayNum(dates[idx[0]]), max: dayNum(dates[idx[idx.length - 1]]),
+             grid: { color: border }, border: { color: border },
+             ticks: { color: muted, maxTicksLimit: 8, callback: v => dayStr(v).slice(2).replace(/-/g, '.') } },
+        y: { stacked, grid: { color: border }, border: { color: border },
+             ticks: { color: muted, callback: v => isRate ? v.toFixed(0) + '%' : v === 0 ? '0'
+               : cur === 'USD' ? '$' + (v / 1000).toLocaleString() + 'k' : (Math.abs(v) >= 1e8 ? (v / 1e8).toFixed(1) + '억' : (v / 1e4).toLocaleString() + '만') } }
+      } }
+  });
+
+  // 안내: 기간 안에서 새로 기록이 시작된 계좌(합계가 계단처럼 뛰는 이유), 환율 출처
+  const firstShown = dates[idx[0]];
+  const starts = series.filter(s => s.points[0].date > firstShown).map(s => `${s.name}(${s.points[0].date.slice(2)})`);
+  const usesLegacyFx = series.some(s => s.points.some(p => p.date < (SNAPS[0] ? SNAPS[0].date : '9999')));
+  note.innerHTML = [
+    starts.length ? `기록 시작 시점: ${esc(starts.join(', '))} — 이 날짜부터 합계에 포함되어 그래프가 계단처럼 오를 수 있습니다.` : '',
+    '기록이 없는 날은 계좌별 직전 기록값을 유지해 합산합니다.',
+    usesLegacyFx ? '과거 구간의 원/달러 환산은 유럽중앙은행 기준환율(나무증권 환율과 ~1% 차이 가능), 달러 계좌 매입금액도 그날 환율로 환산(단순화).' : ''
+  ].filter(Boolean).join('<br>');
+}
+
+/* ----- 비중 변화 차트 + 표 ----- */
+/* 비중 변화 강조·따로 보기 상태(v11, 저장 안 함). focus = 따로 보는 항목 key, hi = 강조 중인 데이터셋 번호(-1 = 없음) */
+const weightView = { focus: null, hi: -1 };
+/**
+ * 마우스 위치가 몇 번째 띠(데이터셋)인지. 입력: 차트, Chart.js 이벤트 / 출력: 데이터셋 번호, 없으면 -1
+ * 방법: 가장 가까운 날짜의 값을 아래(0번)부터 누적해 마우스 높이(%)가 들어가는 띠. 점 사이 구간은 가까운 날짜 기준(근사)
+ */
+function weightBandAt(chart, evt){
+  const els = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, false);
+  if(!els.length) return -1;
+  const i = els[0].index, y = chart.scales.y.getValueForPixel(evt.y);
+  if(!(y >= 0 && y <= 100)) return -1;
+  let cum = 0;
+  for(let k = 0; k < chart.data.datasets.length; k++){
+    if(!chart.isDatasetVisible(k)) continue;   // 범례로 숨긴 항목 제외
+    cum += chart.data.datasets[k].data[i].y || 0;
+    if(y <= cum) return k;
+  }
+  return -1;
+}
+/** k번 띠 강조(나머지 흐리게) + 표의 같은 행 표시. k = -1 이면 원래대로 */
+function weightHighlight(k){
+  const ch = charts.weight;
+  if(!ch || k === weightView.hi) return;
+  weightView.hi = k;
+  ch.data.datasets.forEach((d, j) => {
+    const on = k < 0 || j === k;
+    d.backgroundColor = d._color + (on ? 'B3' : '1F');
+    d.borderColor = d._color + (on ? '' : '40');
+    d.borderWidth = (k >= 0 && j === k) ? 2 : 1;
+  });
+  ch.update('none');
+  const key = k >= 0 && ch.data.datasets[k] ? ch.data.datasets[k]._key : null;
+  document.querySelectorAll('#weightTable tr[data-key]').forEach(tr => tr.classList.toggle('hl', tr.dataset.key === key));
+}
+
+/** 100% 누적 면적. 종목별: 기간 평균 비중 상위 N + 기타 + 예수금. 계좌별: 계좌 총자산 비중 */
+function renderWeights(cur){
+  const box = document.getElementById('weightBox'), note = document.getElementById('weightNote'), tbl = document.getElementById('weightTable');
+  if(charts.weight){ charts.weight.destroy(); charts.weight = null; }
+  if(typeof Chart === 'undefined'){ box.innerHTML = '<div class="chart-fallback">차트 라이브러리를 불러오지 못했습니다.</div>'; return; }
+
+  // 계좌 하나만 선택했으면 '계좌별'은 의미가 없어 종목별로 고정(저장값은 유지), 버튼 숨김
+  const oneAcct = accountSeries(cur).length === 1 && !!scopeIds();
+  const mode = oneAcct ? 'holding' : state.weightMode;
+  document.getElementById('weightModeSeg').classList.toggle('hidden', oneAcct);
+  const W = weightTable(mode, cur);
+  const { start, end } = periodRange(W.dates, state.trendRange);
+  const idx = W.dates.map((d, i) => i).filter(i => W.dates[i] >= start && W.dates[i] <= end);
+  if(idx.length < 1){ box.classList.add('hidden'); tbl.innerHTML = ''; note.textContent = '표시할 기록이 없습니다.'; return; }
+  box.classList.remove('hidden');
+
+  // 표시 항목 정하기: 기간 마지막 날(현재) 비중 상위 N. 지금은 없고 과거에만 있던 종목은 '기타'로
+  // (기간 평균으로 고르면 기록이 긴 한 계좌의 과거 종목이 자리를 차지해서 현재 기준으로 변경)
+  const last = idx[idx.length - 1], first = idx[0];
+  const avg = key => idx.reduce((s, i) => s + W.share[key][i], 0) / idx.length;
+  let shown;   // [{key, name, color, data:[%...] (전체 날짜)}]
+  if(mode === 'account'){
+    shown = W.keys.map((k, n) => ({ key:k.key, name:k.name, color:CONFIG.PALETTE[n % CONFIG.PALETTE.length], data:W.share[k.key] }));
+  }else{
+    const items = W.keys.filter(k => k.key !== '__CASH' && avg(k.key) > 0);
+    items.sort((a, b) => (W.share[b.key][last] - W.share[a.key][last]) || (avg(b.key) - avg(a.key)));  // 현재 비중 큰 순(같으면 평균)
+    const top = items.slice(0, CONFIG.WEIGHT_TOP_N), rest = items.slice(CONFIG.WEIGHT_TOP_N);   // 아래쪽부터 현재 비중 큰 순
+    shown = top.map((k, n) => ({ key:k.key, name:k.name, color:CONFIG.PALETTE[n % CONFIG.PALETTE.length], data:W.share[k.key] }));
+    if(rest.length) shown.push({ key:'__ETC', name:`기타 (${rest.length}개)`, color:CONFIG.ETC_COLOR,
+      data: W.dates.map((d, i) => rest.reduce((s, k) => s + W.share[k.key][i], 0)) });
+    if(W.share.__CASH) shown.push({ key:'__CASH', name:'예수금', color:CONFIG.CASH_COLOR, data:W.share.__CASH });
+  }
+
+  const text = cssVar('--text'), muted = cssVar('--muted'), border = cssVar('--border');
+  const one = idx.length === 1;
+  // 따로 보기(v11): 클릭한 항목 하나만 0% 기준 선으로. 지금 목록에 없는 항목이면 해제
+  const focus = shown.find(s => s.key === weightView.focus) || null;
+  if(!focus) weightView.focus = null;
+  weightView.hi = -1;
+  document.getElementById('weightFocusBar').classList.toggle('hidden', !focus);
+  if(focus) document.getElementById('weightFocusText').textContent = `${focus.name} 비중 추이만 보는 중 `;
+  const datasets = (focus ? [focus] : shown).map((s, n) => ({
+    label: s.name, borderColor: s.color, backgroundColor: s.color + (focus ? '40' : 'B3'), borderWidth: focus ? 2 : 1,
+    fill: n === 0 ? 'origin' : '-1', pointRadius: one ? 3 : 0, pointHoverRadius: 3, tension: 0,
+    _color: s.color, _key: s.key,
+    data: idx.map(i => ({ x: dayNum(W.dates[i]), y: s.data[i] }))
+  }));
+  if(!box.querySelector('canvas')) box.innerHTML = '<canvas id="weightChart"></canvas>';
+  charts.weight = new Chart(document.getElementById('weightChart'), {
+    type: 'line', data: { datasets },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      // 마우스가 있는 띠(종목) 강조, 클릭하면 그 종목만 따로 보기
+      onHover: (evt, els, chart) => {
+        if(focus) return;
+        const k = weightBandAt(chart, evt);
+        weightHighlight(k);
+        evt.native.target.style.cursor = k >= 0 ? 'pointer' : 'default';
+      },
+      onClick: (evt, els, chart) => {
+        if(focus) return;
+        const k = weightBandAt(chart, evt);
+        if(k >= 0){ weightView.focus = chart.data.datasets[k]._key; renderWeights(cur); }
+      },
+      plugins: {
+        // 좁은 화면은 범례 숨김(아래 표의 색 표시가 범례 역할) → 차트 높이 확보
+        // 계좌별 모드: 범례 클릭 → 그 계좌 선택
+        legend: { display: window.innerWidth > 720, position: 'right', labels: { color: text, boxWidth: 10, font: { size: 12 } },
+          onClick: mode === 'account' ? (e, item) => { const k = shown[item.datasetIndex]; if(k) setFilter(k.key); } : undefined,
+          onHover: mode === 'account' ? e => { e.native.target.style.cursor = 'pointer'; } : undefined,
+          onLeave: mode === 'account' ? e => { e.native.target.style.cursor = 'default'; } : undefined },
+        // 강조 중인 종목을 툴팁 맨 위에 ▶ 로 표시
+        tooltip: { itemSort: (a, b) => ((b.datasetIndex === weightView.hi) - (a.datasetIndex === weightView.hi)) || (b.parsed.y - a.parsed.y),
+          filter: it => it.parsed.y >= 0.05 || it.datasetIndex === weightView.hi,
+          callbacks: { title: items => dayStr(items[0].parsed.x),
+            label: c => `${c.datasetIndex === weightView.hi ? '▶' : ' '} ${c.dataset.label}: ${plain(c.parsed.y)}` } }
+      },
+      scales: {
+        x: { type: 'linear', min: dayNum(W.dates[first]) - (one ? 1 : 0), max: dayNum(W.dates[last]) + (one ? 1 : 0),
+             grid: { color: border }, border: { color: border },
+             ticks: { color: muted, maxTicksLimit: 8, callback: v => dayStr(v).slice(2).replace(/-/g, '.') } },
+        // 따로 보기는 누적 아님 + 위쪽 자동(작은 비중도 변화가 보이게)
+        y: { stacked: !focus, min: 0, max: focus ? undefined : 100, grid: { color: border }, border: { color: border },
+             ticks: { color: muted, callback: v => (+v.toFixed(1)) + '%' } }
+      } }
+  });
+
+  // 표: 기간 시작·현재 비중, 변화(%p) — 현재 비중 큰 순
+  const rowsHtml = shown.slice().sort((a, b) => b.data[last] - a.data[last]).map(s => {
+    const d = s.data[last] - s.data[first];
+    return `<tr class="click${focus && focus.key === s.key ? ' sel' : ''}" data-key="${esc(s.key)}" title="클릭: 이 항목 비중 추이만 보기"><td><span class="bar" style="width:8px;background:${s.color};opacity:1"></span>${esc(s.name)}</td>
+      <td class="num">${plain(s.data[first])}</td><td class="num">${plain(s.data[last])}</td>
+      <td class="num ${cls(Math.round(d * 10))}">${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(1)}%p</td></tr>`;
+  }).join('');
+  tbl.innerHTML = `<thead><tr><th>${mode === 'account' ? '계좌' : '종목'}</th><th class="num">${W.dates[first]}</th>
+    <th class="num">${W.dates[last]}</th><th class="num">변화</th></tr></thead><tbody>${rowsHtml}</tbody>`;
+  // 표 행 ↔ 차트 연동: 마우스 → 강조, 클릭 → 따로 보기(같은 행 다시 클릭 → 해제)
+  const keyIndex = key => charts.weight ? charts.weight.data.datasets.findIndex(d => d._key === key) : -1;
+  tbl.onmouseover = e => { const tr = e.target.closest('tr[data-key]'); if(!focus && tr) weightHighlight(keyIndex(tr.dataset.key)); };
+  tbl.onmouseleave = () => { if(!focus) weightHighlight(-1); };
+  tbl.onclick = e => {
+    const tr = e.target.closest('tr[data-key]'); if(!tr) return;
+    weightView.focus = (focus && focus.key === tr.dataset.key) ? null : tr.dataset.key;
+    renderWeights(cur);
+  };
+  document.getElementById('weightChart').onmouseleave = () => { if(!focus) weightHighlight(-1); };
+
+  const unknown = W.keys.filter(k => k.key.startsWith('ACCT:') && idx.some(i => W.share[k.key][i] > 0)).map(k => k.name);
+  note.innerHTML = [
+    '비중 = 그날 총자산(예수금 포함) 대비. 기록이 없는 날은 계좌별 직전 기록을 유지해 계산합니다.',
+    focus ? '' : '그래프 띠나 표 행에 마우스 → 강조, 클릭 → 그 항목 비중 추이만 따로 보기(모바일은 탭).',
+    mode === 'holding' ? `같은 종목은 종목코드로 합산(여러 계좌·001 이력 연결). 개별 표시는 ${W.dates[last]} 기준 비중 상위 ${CONFIG.WEIGHT_TOP_N}개(나머지·과거 보유 종목은 기타).` : '',
+    unknown.length ? `종목 정보가 없는 기록: ${esc(unknown.join(', '))} — 수동 계좌는 [잔고 엑셀 가져오기]로 종목까지 기록할 수 있습니다.` : ''
+  ].filter(Boolean).join('<br>');
+}
+
+/* ----- 배당 기간·분모 계산 ----- */
+/** 연도 기간 값인지. 'y2025' → 2025, 아니면 null */
+const yearOf = range => (typeof range === 'string' && /^y\d{4}$/.test(range)) ? +range.slice(1) : null;
+
+/** 연도 선택 목록 채우기. 입력: select id, 연도 배열(내림차순), 현재 기간 값 */
+function fillYearSelect(id, years, range){
+  document.getElementById(id).innerHTML = '<option value="">연도</option>' +
+    years.map(y => `<option value="y${y}"${range === 'y' + y ? ' selected' : ''}>${y}년</option>`).join('');
+}
+
+/**
+ * 배당 기간 정의. 입력: 기간 값('ytd' | 개월 수 N | 0=전체 | 'y2025'), 오늘, 첫 기록일
+ * 출력: {start, end, firstMonth, lastMonth, months, days, label, range, endsNow, prev:{start,end,label,range}|null}
+ * - 개월 수 N: 이번 달 포함 최근 N개 달력월(예: 1Y = 2025-12-01 ~ 오늘). 비교 = 같은 길이만큼 앞, 끝도 같은 날짜까지
+ * - YTD / 올해 연도: 1/1 ~ 오늘, 비교 = 작년 1/1 ~ 작년 같은 날 / 과거 연도: 1/1 ~ 12/31, 비교 = 그 전해 전체
+ */
+function divPeriod(range, now, firstDate){
+  const Y = +now.slice(0, 4), yr = yearOf(range);
+  const fmt = (a, b) => `${a.slice(2).replace(/-/g, '.')}~${b.slice(2).replace(/-/g, '.')}`;
+  let p;
+  if(range === 'ytd' || yr === Y){
+    p = { start:`${Y}-01-01`, end:now, endsNow:true, label: range === 'ytd' ? `${Y} YTD` : `${Y}년 (진행 중)`,
+          prev:{ start:`${Y - 1}-01-01`, end:`${Y - 1}${now.slice(4)}`, label:`${Y - 1}년 같은 기간` } };
+  }else if(yr){
+    p = { start:`${yr}-01-01`, end:`${yr}-12-31`, endsNow:false, label:`${yr}년`,
+          prev:{ start:`${yr - 1}-01-01`, end:`${yr - 1}-12-31`, label:`${yr - 1}년` } };
+  }else if(+range > 0){
+    const n = +range, start = rangeStart(now, n - 1).slice(0, 7) + '-01';
+    p = { start, end:now, endsNow:true, label:`최근 ${n}개월`,
+          prev:{ start:rangeStart(start, n), end:rangeStart(now, n), label:'직전 같은 기간' } };
+  }else{
+    p = { start:firstDate.slice(0, 7) + '-01', end:now, endsNow:true, label:'전체', prev:null };
+  }
+  p.firstMonth = p.start.slice(0, 7); p.lastMonth = p.end.slice(0, 7);
+  p.months = monthList(p.firstMonth, p.lastMonth).length;
+  p.days = dayNum(p.end) - dayNum(p.start) + 1;
+  p.range = fmt(p.start, p.end);
+  if(p.prev) p.prev.range = fmt(p.prev.start, p.prev.end);
+  return p;
+}
+
+/**
+ * 기간 시작 시점의 매입금액(선택 그룹 API 계좌 합, 표시 통화) — 과거 연도 배당수익률의 분모.
+ * 계좌별 '시작일 이전 마지막 기록'의 매입금액(API 스냅샷 또는 001 이력). 이전 기록이 없으면 시작 후 14일 안의 첫 기록 허용.
+ * 입력: 통화, 시작일, 그 기간에 배당이 있는 계좌 id 목록 / 출력: {buy, missing:[기록 없는 계좌 이름]}
+ */
+function buyAtStart(cur, start, divAccts){
+  const limit = dayStr(dayNum(start) + 14);
+  let buy = 0;
+  const covered = new Set();
+  accountSeries(cur).filter(s => !String(s.id).startsWith('manual:')).forEach(s => {
+    const before = s.points.filter(p => p.date <= start);
+    const p = before.length ? before[before.length - 1] : s.points.find(x => x.date <= limit);
+    if(p){ buy += p.buy; covered.add(s.id); }
+  });
+  return { buy, missing: divAccts.filter(id => !covered.has(id)).map(id => acctInfo(id).name) };
+}
+
+/* ----- 배당 (요약 카드 + 월별 막대 + 종목별 표) ----- */
+/**
+ * 카드·차트·표 모두 선택 기간을 따름. '배당' = 배당·분배금 (+ 세후 보기에서는 세금환급). 이자는 따로.
+ * 배당수익률(매입 대비) = 기간 배당 ÷ 매입금액. 오늘까지 이어지는 기간은 현재 매입금액, 과거 연도는 그해 시작 시점 매입금액.
+ * 종목 총수익 = 기간 배당 + 현재 평가손익(지금 보유 중인 수량 기준).
+ */
+function renderDividends(m, cur){
+  const box = document.getElementById('divBox'), note = document.getElementById('divNote'), tbl = document.getElementById('divTable');
+  const sumEl = document.getElementById('divSummary');
+  if(charts.div){ charts.div.destroy(); charts.div = null; }
+  const net = state.divTax === 'net';
+  const rows = incomeRows(cur);
+  const isDiv = r => r.kind === 'div' || (net && r.kind === 'refund');
+  fillYearSelect('divYear', [...new Set(rows.map(r => +r.date.slice(0, 4)))].sort((a, b) => b - a), state.divRange);
+  if(!rows.length){
+    sumEl.innerHTML = ''; tbl.innerHTML = ''; box.classList.add('hidden');
+    note.innerHTML = INCOME.length ? '선택한 범위에 배당 기록이 없습니다. (수동 계좌는 배당 데이터 없음)'
+      : '배당 데이터가 없습니다. <code>업데이트.bat</code>(수집기 v4 이상)을 실행한 뒤 새로고침하세요.';
+    return;
+  }
+  box.classList.remove('hidden');
+
+  // 기간 집계
+  const now = today(), y12 = rangeStart(now, 12);
+  const P = divPeriod(state.divRange, now, rows[0].date);
+  const inP = (r, a, b) => r.date >= a && r.date <= b;
+  const sumV = list => list.reduce((s, r) => s + r.v, 0);
+  const pr = rows.filter(r => inP(r, P.start, P.end));
+  const divSum = sumV(pr.filter(isDiv));
+  const divCount = pr.filter(r => r.kind === 'div').length;
+  const intSum = sumV(pr.filter(r => r.kind === 'interest'));
+  const prevSum = P.prev ? sumV(rows.filter(r => isDiv(r) && inP(r, P.prev.start, P.prev.end))) : null;
+  const apiAccts = m.scope.accounts.filter(a => a.source === 'api');
+  const stockBuy = apiAccts.reduce((s, a) => s + a.buy, 0);
+  const stockEval = apiAccts.reduce((s, a) => s + a.eval, 0);
+
+  // 배당수익률(매입 대비)의 분모
+  let yBase = 0, yNote;
+  if(P.endsNow){ yBase = stockBuy; yNote = `현재 매입금액 ${money(stockBuy, cur, true)} 기준`; }
+  else{
+    const b = buyAtStart(cur, P.start, [...new Set(pr.filter(r => r.kind === 'div').map(r => r.acct))]);
+    if(b.missing.length || !b.buy) yNote = `${P.start} 시점 매입 기록 없음` + (b.missing.length ? ` (${b.missing.join(', ')})` : '');
+    else{ yBase = b.buy; yNote = `${P.start} 시점 매입금액 ${money(b.buy, cur, true)} 기준`; }
+  }
+  const yld = yBase ? divSum / yBase * 100 : null;
+  const annual = (yld != null && (P.days < 360 || P.days > 370)) ? ` · 연환산 ${(yld * 365 / P.days).toFixed(2)}%` : '';
+
+  // 종목별 집계(표·카드 공용)
+  const held = new Map(mergeHoldings(apiAccts.flatMap(a => a.holdings)).map(h => [holdingKey(h.code, h.name), h]));
+  const byKey = new Map();
+  rows.filter(isDiv).forEach(r => {
+    if(!byKey.has(r.key)) byKey.set(r.key, { key:r.key, name:r.name, code:r.ticker || r.code, accts:new Set(), n:0, sum:0, y12:0, last:'', est:false });
+    const g = byKey.get(r.key);
+    if(r.name) g.name = r.name;                           // 최신 이름
+    if(r.date > y12) g.y12 += r.v;
+    if(!inP(r, P.start, P.end)) return;
+    g.accts.add(acctInfo(r.acct).name);
+    g.sum += r.v; g.est = g.est || r.view.est;
+    if(r.kind === 'div'){ g.n++; if(r.date > g.last) g.last = r.date; }
+  });
+  const list = [...byKey.values()].filter(g => g.sum).sort((a, b) => b.sum - a.sum);
+
+  // 요약 카드
+  const tl = net ? '세후' : '세전';
+  const cards = [
+    [`배당 (${tl}) · ${P.label}`, money(divSum, cur, true), `${P.range} · 월평균 ${money(divSum / P.months, cur, true)} · ${divCount}회`],
+    P.prev
+      ? [`비교: ${P.prev.label}`, money(prevSum, cur, true),
+         `${P.prev.range} · ` + (prevSum ? `<span class="${cls(divSum - prevSum)}">${pct((divSum - prevSum) / prevSum * 100, 1)}</span>` : '기록 없음')]
+      : ['배당 받은 종목', `${list.length}개`, P.range],
+    ['배당수익률 (매입 대비)', yld != null ? yld.toFixed(2) + '%' : '-', yNote + annual],
+    [`예수금 이자 (${tl})`, money(intSum, cur, true), `${P.range} · 예탁금이용료`]
+  ];
+  sumEl.innerHTML = cards.map(c =>
+    `<div class="stat"><div class="lbl">${c[0]}</div><div class="val">${c[1]}</div><div class="sub">${c[2]}</div></div>`).join('');
+
+  // 월별 막대: 계좌별 배당(누적) + 이자 + (세후) 세금환급
+  const months = monthList(P.firstMonth, P.lastMonth);
+  const accIds = [...new Set(pr.filter(r => r.kind === 'div').map(r => r.acct))]
+    .sort((a, b) => acctInfo(a).order - acctInfo(b).order);
+  const monthly = filter => months.map(mo => pr.filter(r => filter(r) && r.date.startsWith(mo)).reduce((s, r) => s + r.v, 0));
+  const datasets = accIds.map((id, n) => ({ label: acctInfo(id).name, data: monthly(r => r.kind === 'div' && r.acct === id),
+    backgroundColor: CONFIG.PALETTE[n % CONFIG.PALETTE.length] }));
+  if(net) datasets.push({ label:'세금환급', data: monthly(r => r.kind === 'refund'), backgroundColor: CONFIG.REFUND_COLOR });
+  datasets.push({ label:'이자', data: monthly(r => r.kind === 'interest'), backgroundColor: CONFIG.INTEREST_COLOR });
+  const shownSets = datasets.filter(d => d.data.some(v => v));
+
+  if(typeof Chart === 'undefined'){ box.innerHTML = '<div class="chart-fallback">차트 라이브러리를 불러오지 못했습니다. 표는 정상 동작합니다.</div>'; }
+  else{
+    if(!box.querySelector('canvas')) box.innerHTML = '<canvas id="divChart"></canvas>';
+    const text = cssVar('--text'), muted = cssVar('--muted'), border = cssVar('--border');
+    charts.div = new Chart(document.getElementById('divChart'), {
+      type: 'bar',
+      data: { labels: months.map(mo => mo.slice(2).replace('-', '.')), datasets: shownSets.map(d => Object.assign(d, { borderRadius: 2, maxBarThickness: 28 })) },
+      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: text, boxWidth: 10, font: { size: 12 } } },
+          tooltip: { filter: it => it.parsed.y !== 0, callbacks: {
+            label: c => ` ${c.dataset.label}: ${money(c.parsed.y, cur, true)}`,
+            footer: items => '합계: ' + money(items.reduce((s, it) => s + it.parsed.y, 0), cur, true) } }
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, border: { color: border }, ticks: { color: muted, autoSkip: true, maxRotation: 0 } },
+          y: { stacked: true, grid: { color: border }, border: { color: border },
+               ticks: { color: muted, callback: v => v === 0 ? '0' : cur === 'USD' ? '$' + v.toLocaleString() : (Math.abs(v) >= 1e4 ? (v / 1e4).toLocaleString() + '만' : v.toLocaleString()) } }
+        } }
+    });
+  }
+
+  // 종목별 표: 기간 합계 큰 순. 매입금액·평가손익은 지금 보유 중인 종목만(같은 종목 합산)
+  const u = unitLabel(cur);
+  const pctOrDash = (a, b) => b ? plain(a / b * 100) : '-';
+  let tBuy = 0, tPl = 0, tEval = 0, tY12Held = 0;
+  const body = list.map(g => {
+    const h = held.get(g.key);
+    const total = g.sum + (h ? h.pl : 0);
+    if(h){ tBuy += h.buy; tPl += h.pl; tEval += h.eval; tY12Held += g.y12; }
+    return `<tr><td>${esc(g.name)}<span class="code">${esc(g.code || '')}</span></td>
+      <td class="col-opt">${esc([...g.accts].join(', '))}</td>
+      <td class="num col-opt">${g.n}</td>
+      <td class="num">${money(g.sum, cur)}${g.est && !net ? '<span class="muted">*</span>' : ''}</td>
+      <td class="num col-opt">${h ? money(h.buy, cur) : '<span class="muted">보유 안 함</span>'}</td>
+      <td class="num col-opt ${h ? cls(h.pl) : ''}">${h ? signed(h.pl, cur) : '-'}</td>
+      <td class="num ${cls(total)}">${signed(total, cur)}</td>
+      <td class="num">${h ? pctOrDash(g.y12, h.buy) : '-'}</td>
+      <td class="num col-opt">${h ? pctOrDash(g.y12, h.eval) : '-'}</td>
+      <td class="num col-opt">${g.last ? esc(g.last.slice(2)) : '<span class="muted">환급만</span>'}</td></tr>`;
+  }).join('');
+  const tSum = list.reduce((s, g) => s + g.sum, 0);
+  tbl.innerHTML = `<thead><tr><th>종목</th><th class="col-opt">계좌</th><th class="num col-opt">횟수</th>
+      <th class="num">기간 배당${u}</th><th class="num col-opt">매입금액${u}</th><th class="num col-opt">평가손익${u}</th>
+      <th class="num">총수익${u}</th><th class="num">매입 대비<br>(12M)</th><th class="num col-opt">시가 대비<br>(12M)</th>
+      <th class="num col-opt">최근 지급</th></tr></thead>
+    <tbody>${body || '<tr><td colspan="10" class="muted">기간 안에 배당이 없습니다</td></tr>'}
+    <tr class="total"><td>합계 (${list.length}종목)</td><td class="col-opt"></td><td class="num col-opt">${list.reduce((s, g) => s + g.n, 0)}</td>
+      <td class="num">${money(tSum, cur)}</td><td class="num col-opt">${money(tBuy, cur)}</td>
+      <td class="num col-opt ${cls(tPl)}">${signed(tPl, cur)}</td><td class="num ${cls(tSum + tPl)}">${signed(tSum + tPl, cur)}</td>
+      <td class="num">${pctOrDash(tY12Held, tBuy)}</td><td class="num col-opt">${pctOrDash(tY12Held, tEval)}</td><td class="col-opt"></td></tr></tbody>`;
+
+  note.innerHTML = [
+    `기간: ${P.label} (${P.range}). 카드·차트·표 모두 이 기간 기준.`,
+    '배당수익률(매입 대비) = 기간 배당 ÷ 매입금액. 오늘까지 이어지는 기간은 현재 매입금액, 과거 연도는 그해 시작 시점 매입금액(기록이 있는 2025-09 이후만).',
+    '종목 표: 총수익 = 기간 배당 + 현재 평가손익. 매입 대비·시가 대비는 최근 12개월 배당 ÷ 현재 매입금액·평가금액. 매입금액은 지금 보유 수량 기준이라 기간 중 나눠 샀으면 실제와 다를 수 있음.',
+    net ? '세후 = 실제 입금액(해외는 미국 원천징수 후, 국내 세금 차감) + 외화제세금환급.'
+        : `세전: 국내는 API 금액, 해외는 입금액 ÷ ${1 - CONFIG.US_WITHHOLD_RATE}(미국 원천징수 ${CONFIG.US_WITHHOLD_RATE * 100}% 가정) — <span class="muted">*</span> 표시는 추정 포함. 세금환급은 세후 보기에서만 더함(세전과 중복).`,
+    cur === 'KRW' ? '달러 배당의 원화 금액 = 지급일 환율 환산(유럽중앙은행 기준 이력, 나무증권 환율과 ~1% 차이 가능).'
+                  : '원화 배당의 달러 금액 = 지급일 환율로 나눔.',
+    '수동 계좌(연금·ISA)는 배당 데이터가 없어 제외. 거래내역 범위: ' + esc(INCOME[0].date) + ' ~ ' + esc(INCOME[INCOME.length - 1].date)
+  ].join('<br>');
+}
+
+/* ----- 탭 ----- */
+const TABS = MOBILE ? ['status', 'trend', 'dividend'] : ['status', 'trend', 'dividend', 'manage'];   // 모바일: 관리 탭 없음
+const TAB_ALIAS = { '현황':'status', '추이':'trend', '배당':'dividend', '관리':'manage' };
+/** 주소 #해시 → 탭 이름(없거나 모르면 null). 예: '#배당' → 'dividend' */
+function tabFromHash(){
+  const h = decodeURIComponent(location.hash.slice(1));
+  return TABS.includes(h) ? h : (TAB_ALIAS[h] || null);
+}
+/** 탭 전환: data-tab 이 다른 섹션 숨김 → 저장 → 다시 그리기(숨겨져 있던 차트 크기 재계산) */
+function showTab(t){
+  if(!TABS.includes(t)) t = 'status';
+  state.tab = t; save('tab', t);
+  document.querySelectorAll('main [data-tab]').forEach(el => el.style.display = el.dataset.tab === t ? '' : 'none');
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  render();
+  window.scrollTo(0, 0);
+}
+
+/* ----- 내 계좌 그룹 (관리 탭) ----- */
+/** 그룹 목록 표 + 구성 계좌 체크박스(API 계좌 전체 + 수동 계좌) 그리기 */
+function renderGroups(){
+  const rows = state.groups.map(g => `<tr class="click" data-gid="${esc(g.id)}">
+      <td>${esc(g.name)}</td><td>${esc(g.members.map(keyName).join(', '))}</td>
+      <td><button class="btn-text" data-gview="${esc(g.id)}">보기</button><button class="btn-text" data-gdel="${esc(g.id)}">삭제</button></td></tr>`).join('');
+  document.getElementById('grpTable').innerHTML = `<thead><tr><th>그룹</th><th>구성 계좌</th><th></th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="3" class="muted">아직 없습니다. 아래에서 이름과 계좌를 골라 [그룹 저장]</td></tr>'}</tbody>`;
+  const box = document.getElementById('gMembers');
+  const checked = new Set([...box.querySelectorAll('input:checked')].map(c => c.value));   // 다시 그려도 체크 유지
+  const keys = (LATEST ? LATEST.accounts.map(a => a.id) : []).concat(state.manual.map(mm => 'manual:' + mm.id));
+  box.innerHTML = keys.map(k => `<label class="chk"><input type="checkbox" value="${esc(k)}"${checked.has(k) ? ' checked' : ''}> ${esc(keyName(k))}${k.startsWith('manual:') ? ' (수동)' : ''}</label>`).join('')
+    || '<span class="muted small">계좌가 없습니다</span>';
+}
+
+/** 그룹 저장: 같은 이름이면 구성 덮어쓰기. 계좌 1개 이상 필요 */
+function saveGroup(){
+  const name = document.getElementById('gName').value.trim();
+  const members = [...document.querySelectorAll('#gMembers input:checked')].map(c => c.value);
+  if(!name){ alert('그룹 이름을 입력하세요.'); return; }
+  if(!members.length){ alert('구성 계좌를 1개 이상 고르세요.'); return; }
+  let g = state.groups.find(x => x.name === name);
+  if(!g){ g = { id:'g' + Date.now().toString(36), name, members:[] }; state.groups.push(g); }
+  g.members = members;
+  if(save('groups', state.groups)){
+    document.getElementById('gName').value = '';
+    document.querySelectorAll('#gMembers input').forEach(c => c.checked = false);
+  }
+  render();
+}
+
+/* ===== 6. 이벤트 ===== */
+/** 숫자 입력 파싱: 쉼표·공백 제거, '−'(전각 마이너스)도 허용. 실패 시 NaN */
+function parseNum(s){ return Number(String(s).replace(/[,\s원]/g, '').replace('−', '-')); }
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+/** 현지 시각 'YYYY-MM-DD HH:MM' (UTC로 저장하면 한국 새벽에 날짜가 하루 밀려 보임) */
+const nowLocal = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16).replace('T', ' ');
+
+function bindEvents(){
+  document.getElementById('curSeg').addEventListener('click', e => {
+    const c = e.target.dataset.cur; if(!c) return;
+    if(c === 'USD' && !fxOf(LATEST) && state.manual.length + SNAPS.length > 0){
+      showWarn('환율 정보가 없어 달러로 표시할 수 없습니다(해외 잔고·외화예수금이 있는 스냅샷 필요).'); return;
+    }
+    state.currency = c; save('currency', c); render();
+  });
+  // 계좌 그룹 선택 → 표시 통화 자동 전환(환율 없으면 원화 유지). 종목 필터는 그룹 밖이면 renderHoldings에서 '전체'로 초기화
+  document.getElementById('groupSeg').addEventListener('click', e => {
+    const g = e.target.dataset.group; if(!g) return;
+    state.group = g; save('group', g);
+    const c = CONFIG.GROUP_CURRENCY[g] || state.currency;
+    if(c === 'KRW' || fxOf(LATEST)){ state.currency = c; save('currency', c); }
+    render();
+  });
+  // 자산 추이 옵션: [합계|계좌별] [금액|수익률] [기간]
+  [['trendModeSeg', 'trendMode', String], ['trendMetricSeg', 'trendMetric', String], ['trendRangeSeg', 'trendRange', v => v === 'ytd' ? 'ytd' : Number(v)],
+   ['weightModeSeg', 'weightMode', String], ['divTaxSeg', 'divTax', String], ['divRangeSeg', 'divRange', v => v === 'ytd' ? 'ytd' : Number(v)]]
+    .forEach(([elId, key, conv]) => document.getElementById(elId).addEventListener('click', e => {
+      const v = e.target.dataset.v; if(v === undefined) return;
+      state[key] = conv(v); save(key, state[key]); render();
+    }));
+  // 연도 선택(자산 추이·배당): 'y2025' 형식으로 기간 값에 저장
+  [['trendYear', 'trendRange'], ['divYear', 'divRange']].forEach(([elId, key]) =>
+    document.getElementById(elId).addEventListener('change', e => {
+      if(!e.target.value) return;
+      state[key] = e.target.value; save(key, state[key]); render();
+    }));
+  document.getElementById('pieSeg').addEventListener('click', e => {
+    const md = e.target.dataset.mode; if(!md) return;
+    state.pieMode = md; save('pieMode', md); render();
+  });
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    save('theme', next); render();   // 차트 색 다시 읽기
+  });
+  // 업데이트 방법: 관리 탭으로 이동 + 도움말 열기(관리 탭에서 다시 누르면 닫기)
+  document.getElementById('helpBtn').addEventListener('click', () => {
+    const hp = document.getElementById('helpPanel');
+    if(state.tab === 'manage') hp.classList.toggle('hidden');
+    else{ hp.classList.remove('hidden'); showTab('manage'); }
+  });
+  document.getElementById('tabs').addEventListener('click', e => { const t = e.target.dataset.tab; if(t) showTab(t); });
+  document.getElementById('filterClear').addEventListener('click', () => setFilter('all'));
+  document.getElementById('acctSel').addEventListener('change', e => setFilter(e.target.value));
+  window.addEventListener('hashchange', () => { const t = tabFromHash(); if(t) showTab(t); });
+
+  // 계좌 행 클릭 → 종목 필터(다시 누르면 해제)
+  document.getElementById('acctTable').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-acct]'); if(!tr) return;
+    // 합계 행(data-acct="all") 또는 선택 중인 계좌를 다시 누르면 전체 기준으로
+    setFilter((tr.dataset.acct === 'all' || state.filter === tr.dataset.acct) ? 'all' : tr.dataset.acct);
+  });
+  document.getElementById('acctFilter').addEventListener('change', e => setFilter(e.target.value));
+  // 내 계좌 그룹: 저장 / 보기 / 삭제 / 행 클릭 시 폼 채우기
+  document.getElementById('gSave').addEventListener('click', saveGroup);
+  document.getElementById('grpTable').addEventListener('click', e => {
+    const del = e.target.closest('[data-gdel]'), view = e.target.closest('[data-gview]');
+    if(del){
+      const g = state.groups.find(x => x.id === del.dataset.gdel);
+      if(g && confirm(`'${g.name}' 그룹을 삭제할까요? (계좌 기록은 그대로)`)){
+        state.groups = state.groups.filter(x => x !== g); save('groups', state.groups);
+        if(state.filter === 'grp:' + g.id) setFilter('all'); else render();
+      }
+      return;
+    }
+    if(view){ state.filter = 'grp:' + view.dataset.gview; save('filter', state.filter); showTab('status'); return; }
+    const tr = e.target.closest('tr[data-gid]'); if(!tr) return;
+    const g = state.groups.find(x => x.id === tr.dataset.gid); if(!g) return;
+    document.getElementById('gName').value = g.name;
+    document.querySelectorAll('#gMembers input').forEach(c => c.checked = g.members.includes(c.value));
+  });
+  document.getElementById('mergeChk').addEventListener('change', e => { state.merge = e.target.checked; save('merge', state.merge); render(); });
+  document.getElementById('holdTable').addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]'); if(!th) return;
+    const k = th.dataset.sort;
+    state.sort = state.sort.key === k ? { key:k, dir:-state.sort.dir } : { key:k, dir:(k === 'name' || k === 'acctName') ? 1 : -1 };
+    render();
+  });
+
+  // 수동 계좌: 기록 / 행 클릭 시 폼 채우기 / 삭제
+  document.getElementById('mSave').addEventListener('click', saveManual);
+  document.getElementById('manualTable').addEventListener('click', e => {
+    const del = e.target.closest('[data-del]');
+    if(del){
+      const mm = state.manual.find(x => x.id === del.dataset.del);
+      if(mm && confirm(`'${mm.name}' 계좌와 기록 ${mm.entries.length}건을 삭제할까요?`)){
+        state.manual = state.manual.filter(x => x !== mm); save('manual', state.manual); render();
+      }
+      return;
+    }
+    const tr = e.target.closest('tr[data-manual]'); if(!tr) return;
+    const mm = state.manual.find(x => x.id === tr.dataset.manual);
+    const en = mm.entries.slice().sort((a,b) => a.date.localeCompare(b.date)).pop();
+    document.getElementById('mName').value = mm.name;
+    document.getElementById('mDate').value = today();
+    document.getElementById('mTotal').value = en.total.toLocaleString('ko-KR');
+    document.getElementById('mCash').value = en.cash.toLocaleString('ko-KR');
+    document.getElementById('mPl').value = en.pl.toLocaleString('ko-KR');
+  });
+
+  document.getElementById('weightFocusClear').addEventListener('click', () => { weightView.focus = null; render(); });
+  document.getElementById('exportBtn').addEventListener('click', exportBackup);
+  document.getElementById('dirConnect').addEventListener('click', connectDir);
+  document.getElementById('dirDisconnect').addEventListener('click', disconnectDir);
+  document.getElementById('backupBarBtn').addEventListener('click', e => {
+    const act = e.target.dataset.act;
+    if(act === 'export') exportBackup(); else if(act === 'connect') connectDir();
+    else if(act === 'force'){ if(confirm('기록이 최신 백업보다 줄어든 상태로 저장합니다.\n직접 지운 것이 맞나요? (이전 날짜 백업 파일은 그대로 남습니다)')) autoBackup(true, true); }
+    else autoBackup(true);
+  });
+  document.getElementById('restoreBtn').addEventListener('click', restoreEmbedded);
+  document.getElementById('restoreClose').addEventListener('click', () => {
+    document.getElementById('restoreBar').classList.add('hidden');
+    const B = NH && NH.dashboard_backup;
+    if(B) save('restoreDismissed', B.file + '|' + B.exported_at);   // 같은 백업으로 다시 묻지 않음
+    if(applyInbox()) render();               // 복원 안 함 → 미뤄 둔 HTS 엑셀 반영
+  });
+  document.getElementById('inboxClose').addEventListener('click', () => document.getElementById('inboxBar').classList.add('hidden'));
+  document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
+  document.getElementById('importFile').addEventListener('change', importBackup);
+  document.getElementById('xlsxBtn').addEventListener('click', () => {
+    if(typeof XLSX === 'undefined'){ alert('엑셀 처리 라이브러리(SheetJS)를 불러오지 못했습니다. 인터넷 연결을 확인하세요.'); return; }
+    document.getElementById('xlsxFile').click();
+  });
+  document.getElementById('xlsxFile').addEventListener('change', e => { const fs = [...e.target.files]; e.target.value = ''; loadXlsxFiles(fs); });
+  document.getElementById('xlsxSave').addEventListener('click', saveXlsxRows);
+  document.getElementById('xlsxClose').addEventListener('click', () => { xlsxRows = []; document.getElementById('xlsxPanel').classList.add('hidden'); });
+  document.getElementById('xlsxTable').addEventListener('change', e => {
+    const i = +e.target.closest('tr').dataset.i, r = xlsxRows[i]; if(!r) return;
+    if(e.target.dataset.f === 'target'){ r.target = e.target.value; r.cash = defaultCash(r.target); }
+    if(e.target.dataset.f === 'cash') r.cash = parseNum(e.target.value);
+    if(e.target.dataset.f === 'chk') r.checked = e.target.checked;
+    renderXlsxPanel();
+  });
+  document.getElementById('import001Btn').addEventListener('click', () => document.getElementById('import001File').click());
+  document.getElementById('import001File').addEventListener('change', import001);
+}
+
+/** 수동 계좌 기록 저장. 같은 이름이면 그 계좌에, 같은 날짜면 덮어씀 */
+function saveManual(){
+  const name = document.getElementById('mName').value.trim();
+  const date = document.getElementById('mDate').value;
+  const total = parseNum(document.getElementById('mTotal').value);
+  const cash = parseNum(document.getElementById('mCash').value || 0);
+  const pl = parseNum(document.getElementById('mPl').value || 0);
+  if(!name || !date){ alert('계좌 이름과 기준일을 입력하세요.'); return; }
+  if(![total, cash, pl].every(Number.isFinite) || total <= 0){ alert('총자산·예수금·평가손익을 숫자로 입력하세요(총자산은 0보다 커야 함).'); return; }
+  if(cash > total){ alert('예수금이 총자산보다 클 수 없습니다.'); return; }
+  let mm = state.manual.find(x => x.name === name);
+  if(!mm){ mm = { id:'m' + Date.now().toString(36), name, entries:[] }; state.manual.push(mm); }
+  mm.entries = mm.entries.filter(e => e.date !== date).concat([{ date, total, cash, pl }]);
+  if(save('manual', state.manual)){
+    ['mTotal','mCash','mPl'].forEach(id => document.getElementById(id).value = '');
+  }
+  render();
+}
+
+/* ===== 7-0. 자동 백업 · 복원 제안 · 수집 상태 ===== */
+/*
+ * 자동 백업: File System Access API(Chrome·Edge). 사용자가 고른 폴더 핸들을 IndexedDB 에 보관하고,
+ * 기록이 바뀌면 0.8초 뒤 backup/nhdash_backup_날짜.json 에 저장. 브라우저 허가는 사용자 클릭 직후에만 요청 가능
+ * → 변경 클릭 직후(자동) 또는 다음 클릭 때 / 상단 [지금 저장]. 허가 유지 방식은 브라우저 버전·설정에 따라 다름.
+ */
+const FS_OK = typeof window.showDirectoryPicker === 'function';
+const backup = { dir:null, perm:'none', asked:false, timer:null, msg:'', shrink:false };   // shrink = 기록 감소로 저장 보류 중
+/** 현지 시각 'YYYY-MM-DD HH:MM:SS' (변경·저장 시각 비교용) */
+const nowSec = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace('T', ' ');
+
+/* IndexedDB: 폴더 핸들 보관용(localStorage 에는 핸들을 저장할 수 없음) */
+function idbOpen(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('nhdash', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbGet(k){
+  const db = await idbOpen();
+  return new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+}
+async function idbSet(k, v){
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('kv', 'readwrite');
+    if(v === undefined) tx.objectStore('kv').delete(k); else tx.objectStore('kv').put(v, k);
+    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+  });
+}
+
+/** 백업 대상 기록이 바뀜 → 변경 시각 기록 + 자동 저장 예약 */
+function markChanged(){
+  try{ localStorage.setItem(CONFIG.PREFIX + 'lastChange', JSON.stringify(nowSec())); }catch(e){}
+  clearTimeout(backup.timer);
+  backup.timer = setTimeout(() => autoBackup(false), 800);
+  updateBackupUI();
+}
+/** 자동 저장·내보내기 이후에 바뀐 기록이 있는지 */
+function unsaved(){
+  const lc = load('lastChange', ''), ls = load('lastAutoSave', ''), le = load('lastExport', '');
+  return !!lc && lc > ls && lc > le;
+}
+
+/**
+ * 연결된 폴더에 오늘 날짜 파일로 저장. 입력: 사용자 클릭에서 불렸는지(허가 요청 가능 여부)
+ * 출력: 성공 여부. 허가 없으면 저장하지 않고 안내만 갱신
+ * force = true: 기록 감소 보류를 무시하고 저장([그래도 저장] 확인 후에만)
+ */
+async function autoBackup(fromGesture, force){
+  if(!FS_OK || !backup.dir){ updateBackupUI(); return false; }
+  try{
+    let p = await backup.dir.queryPermission({ mode:'readwrite' });
+    const active = navigator.userActivation ? navigator.userActivation.isActive : false;
+    if(p !== 'granted' && (fromGesture || active)) p = await backup.dir.requestPermission({ mode:'readwrite' });
+    backup.perm = p;
+    if(p !== 'granted'){ updateBackupUI(); return false; }
+    // 손실 방지(v11): 폴더의 최신 백업보다 기록이 줄었으면 저장 보류 → 상단 띠 [그래도 저장](확인 후)
+    const payload = backupPayload();
+    if(!force){
+      const prev = await latestDirBackup();
+      const drop = prev ? shrinkText(backupStats(prev.data), backupStats(payload)) : '';
+      if(drop){
+        backup.shrink = true;
+        backup.msg = `최신 백업(${prev.name})보다 기록이 줄어 자동 저장을 멈췄습니다: ${drop}. 브라우저 기록이 지워졌다면 [백업 불러오기]로 복원, 직접 지운 것이면 [그래도 저장].`;
+        updateBackupUI(); return false;
+      }
+    }
+    backup.shrink = false;
+    const fh = await backup.dir.getFileHandle(`nhdash_backup_${today()}.json`, { create:true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(payload, null, 2));
+    await w.close();
+    save('lastAutoSave', nowSec());
+    backup.msg = '';
+  }catch(e){
+    console.error('자동 백업 실패', e);
+    backup.msg = '자동 저장 실패: ' + (e && e.message || e);
+  }
+  updateBackupUI();
+  return !backup.msg;
+}
+
+/**
+ * 기록 양 세기(손실 감지용). 입력: 백업 형식 객체 {manual, legacy, groups}
+ * 출력: {entries: 수동 기록 건수 합, legacy: 001 이력 점 수 합, groups: 내 그룹 수}
+ */
+function backupStats(d){
+  const L = (d && d.legacy && d.legacy.accounts) || {};
+  return {
+    entries: ((d && d.manual) || []).reduce((s, m) => s + ((m && m.entries) || []).length, 0),
+    legacy: Object.values(L).reduce((s, a) => s + ((a && a.points) || []).length, 0),
+    groups: ((d && d.groups) || []).length
+  };
+}
+/** 줄어든 항목 설명. 입력: 이전·현재 backupStats / 출력: '' (줄지 않음) 또는 '수동 기록 10→4건, …' */
+function shrinkText(prev, cur){
+  const label = { entries:'수동 기록', legacy:'001 이력', groups:'내 그룹' }, unit = { entries:'건', legacy:'개', groups:'개' };
+  return Object.keys(label).filter(k => cur[k] < prev[k]).map(k => `${label[k]} ${prev[k]}→${cur[k]}${unit[k]}`).join(', ');
+}
+/** 연결 폴더의 최신 nhdash_backup_날짜.json 읽기. 출력: {name, data} 또는 null(없음·읽기 실패) */
+async function latestDirBackup(){
+  let best = null;
+  for await (const [name, h] of backup.dir.entries()){
+    if(h.kind === 'file' && /^nhdash_backup_\d{4}-\d{2}-\d{2}\.json$/.test(name) && (!best || name > best.name)) best = { name, h };
+  }
+  if(!best) return null;
+  try{ return { name: best.name, data: JSON.parse(await (await best.h.getFile()).text()) }; }
+  catch(e){ console.error('최신 백업 읽기 실패', e); return null; }
+}
+
+/** [백업 폴더 연결]: 폴더 고르기 → 이름 확인 → 보관 → 지금 상태 바로 저장 */
+async function connectDir(){
+  if(!FS_OK){ alert('이 브라우저는 폴더 자동 저장을 지원하지 않습니다(Chrome·Edge 필요). [백업 내보내기]를 사용하세요.'); return; }
+  let h;
+  try{ h = await window.showDirectoryPicker({ id:'nhdash-backup', mode:'readwrite' }); }
+  catch(e){ return; }   // 취소
+  if(h.name !== CONFIG.BACKUP_DIR_NAME && !confirm(`고른 폴더 이름이 '${h.name}' 입니다.\n002주식관리자동화 폴더 안의 '${CONFIG.BACKUP_DIR_NAME}' 폴더를 권장합니다(수집기가 그 폴더의 최신 백업을 복원용으로 읽음).\n그래도 이 폴더를 쓸까요?`)) return;
+  backup.dir = h; backup.perm = 'granted'; backup.msg = '';
+  try{ await idbSet('backupDir', h); }catch(e){ console.error(e); backup.msg = '폴더 정보를 저장하지 못했습니다(다음에 다시 연결 필요)'; }
+  await autoBackup(true);
+}
+async function disconnectDir(){
+  backup.dir = null; backup.perm = 'none'; backup.msg = ''; backup.shrink = false;
+  try{ await idbSet('backupDir', undefined); }catch(e){}
+  updateBackupUI();
+}
+
+/** 관리 탭 상태 문구 + 상단 '백업 안 된 변경' 안내 띠 */
+function updateBackupUI(){
+  const st = document.getElementById('autoStatus');
+  if(!st) return;
+  const last = load('lastAutoSave', '');
+  let text;
+  if(!FS_OK) text = '이 브라우저는 폴더 자동 저장 미지원(Chrome·Edge에서 사용) → [백업 내보내기]로 저장하세요.';
+  else if(!backup.dir) text = '백업 폴더가 연결되지 않았습니다.';
+  else if(backup.perm !== 'granted') text = `'${backup.dir.name}' 폴더 연결됨 · 브라우저 허가 대기(기록을 바꾸는 클릭 때 요청)`;
+  else text = `'${backup.dir.name}' 폴더에 자동 저장 중`;
+  if(last) text += ` · 마지막 자동 저장 ${last.slice(0, 16)}`;
+  if(backup.msg) text += ' · ' + backup.msg;
+  st.textContent = text;
+  document.getElementById('dirConnect').textContent = backup.dir ? '다른 폴더로 변경' : '백업 폴더 연결';
+  document.getElementById('dirDisconnect').classList.toggle('hidden', !backup.dir);
+
+  const bar = document.getElementById('backupBar'), btn = document.getElementById('backupBarBtn');
+  const blocked = !FS_OK || !backup.dir || backup.perm !== 'granted' || !!backup.msg;
+  const show = unsaved() && blocked;
+  bar.classList.toggle('hidden', !show);
+  if(show){
+    document.getElementById('backupBarText').textContent = backup.shrink ? backup.msg
+      : '백업되지 않은 변경이 있습니다(수동 기록·그룹 등).' + (backup.msg ? ' ' + backup.msg : '');
+    btn.textContent = !FS_OK ? '백업 내보내기' : !backup.dir ? '백업 폴더 연결' : backup.shrink ? '그래도 저장' : '지금 저장';
+    btn.dataset.act = !FS_OK ? 'export' : !backup.dir ? 'connect' : backup.shrink ? 'force' : 'save';
+  }
+}
+
+/** 시작 시: 보관된 폴더 핸들 읽기 + 허가 상태 확인. 허가가 필요하고 저장 안 된 변경이 있으면 다음 클릭 때 요청 */
+async function initAutoBackup(){
+  if(FS_OK){
+    try{
+      const h = await idbGet('backupDir');
+      if(!backup.dir && h){   // 읽는 사이 사용자가 이미 연결했으면 덮어쓰지 않음
+        backup.dir = h;
+        backup.perm = await h.queryPermission({ mode:'readwrite' });
+      }
+    }catch(e){ console.error('백업 폴더 정보 읽기 실패', e); }
+    document.addEventListener('pointerdown', () => {
+      if(backup.dir && backup.perm !== 'granted' && unsaved() && !backup.asked){ backup.asked = true; autoBackup(true); }
+    }, { capture:true });
+  }
+  updateBackupUI();
+}
+
+/**
+ * 복원 제안: 수집기가 data.js 에 넣은 최신 백업(dashboard_backup)과 비교.
+ * - 브라우저 기록이 비어 있으면 → [복원] 안내
+ * - 브라우저 마지막 변경보다 백업이 더 최신이고 내용이 다르면(다른 PC·브라우저에서 저장) → [복원] 안내
+ */
+function checkEmbeddedBackup(){
+  const B = NH && NH.dashboard_backup;
+  if(!B || !Array.isArray(B.manual)) return;
+  const pack = (manual, legacy, groups) => JSON.stringify([manual || [], (legacy && legacy.accounts) || {}, groups || []]);
+  if(pack(state.manual, state.legacy, state.groups) === pack(B.manual, B.legacy, B.groups)) return;
+  const empty = !state.manual.length && !Object.keys(state.legacy.accounts || {}).length && !state.groups.length;
+  const lc = load('lastChange', '');
+  const newer = !!lc && String(B.exported_at || '') > lc.slice(0, 16);
+  // v11: 브라우저 기록이 백업보다 적음(일부 지워짐). [닫기]한 같은 백업에 대해서는 다시 묻지 않음
+  const drop = shrinkText(backupStats(B), backupStats({ manual:state.manual, legacy:state.legacy, groups:state.groups }));
+  const fewer = !!drop && load('restoreDismissed', '') !== B.file + '|' + B.exported_at;
+  if(!empty && !newer && !fewer) return;
+  document.getElementById('restoreText').textContent = (empty
+    ? '브라우저에 저장된 수동 기록이 없습니다. '
+    : fewer ? `이 브라우저 기록이 백업보다 적습니다(${drop}). `
+    : '이 브라우저 기록보다 최신 백업이 있습니다. ') + `backup 폴더 백업(${B.file}, ${B.exported_at})으로 복원할 수 있습니다.`;
+  document.getElementById('restoreBar').classList.remove('hidden');
+}
+function restoreEmbedded(){
+  const B = NH && NH.dashboard_backup; if(!B) return;
+  const v = checkBackup(B);
+  if(v.error){ alert(v.error); return; }
+  if(!confirm(`백업(${B.file})의 수동 계좌 ${B.manual.length}개` + (v.hasLegacy ? `, 001 이력 ${Object.keys(B.legacy.accounts).length}개 계좌` : '') +
+    `, 그룹 ${(B.groups || []).length}개로 현재 기록을 덮어쓸까요? (화면 설정은 그대로)`)) return;
+  applyBackupData(B, v.hasLegacy);
+  document.getElementById('restoreBar').classList.add('hidden');
+  save('inboxApplied', []); applyInbox();   // 복원한 기록 위에 HTS 엑셀 다시 반영
+  render();
+}
+
+/** 수집 상태 경고: 마지막 자동 수집 실패, 또는 잔고가 오래됨 */
+function checkLastRun(){
+  if(!NH) return;
+  const lr = NH.last_run;
+  if(lr && lr.ok === false){
+    showWarn(`마지막 수집 실패 (${String(lr.at).replace('T', ' ').slice(0, 16)}): ${lr.message || '원인 미상'} — data/logs 로그 확인 또는 업데이트.bat 수동 실행`);
+  }else if(LATEST && MOBILE){
+    const days = dayNum(today()) - dayNum(LATEST.date);
+    if(days >= CONFIG.STALE_DATA_DAYS) showWarn(`잔고 데이터가 ${days}일 전(${LATEST.date})입니다. PC에서 수집 후 모바일올리기.bat 을 실행하면 갱신됩니다.`);
+  }else if(LATEST){
+    const days = dayNum(today()) - dayNum(LATEST.date);
+    if(days >= CONFIG.STALE_DATA_DAYS) showWarn(`잔고 데이터가 ${days}일 전(${LATEST.date})입니다. 매일 07:00 자동 수집이 실행됐는지 확인하세요(업데이트.bat 수동 실행 가능).`);
+  }
+}
+
+/* ===== 7. 백업 / 복원 ===== */
+/** 백업 내용(내보내기·자동 저장 공용) */
+function backupPayload(){
+  return { app:'nhdash', version:CONFIG.VERSION, exported_at:nowLocal(),
+    manual: state.manual, legacy: state.legacy, groups: state.groups,
+    settings: { currency:state.currency, group:state.group, merge:state.merge, pieMode:state.pieMode,
+                trendMode:state.trendMode, trendMetric:state.trendMetric, trendRange:state.trendRange, weightMode:state.weightMode,
+                divTax:state.divTax, divRange:state.divRange } };
+}
+function exportBackup(){
+  const data = backupPayload();
+  save('lastExport', nowSec());
+  updateBackupUI();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `nhdash_backup_${today()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** 백업 형식 검사. 출력: {error:문구} 또는 {hasLegacy} */
+function checkBackup(d){
+  if(!d || (d.app && d.app !== 'nhdash') || !Array.isArray(d.manual)) return { error:'이 대시보드의 백업 파일이 아닙니다.' };
+  const ok = d.manual.every(m => m && m.id && m.name && Array.isArray(m.entries) &&
+    m.entries.every(x => x.date && [x.total, x.cash, x.pl].every(Number.isFinite)));
+  if(!ok) return { error:'백업 파일 내용이 손상되었습니다(수동 계좌 형식 오류).' };
+  const hasLegacy = !!(d.legacy && typeof d.legacy.accounts === 'object' &&
+    Object.values(d.legacy.accounts).every(L => L && Array.isArray(L.points)));
+  if(d.legacy && !hasLegacy) return { error:'백업 파일 내용이 손상되었습니다(001 이력 형식 오류).' };
+  return { hasLegacy };
+}
+/** 백업의 기록(수동 계좌·001 이력·내 그룹)을 현재 브라우저에 덮어쓰기. 화면 설정은 호출한 쪽에서 */
+function applyBackupData(d, hasLegacy){
+  state.manual = d.manual; save('manual', state.manual);
+  if(hasLegacy){ state.legacy = d.legacy; save('legacy', state.legacy); }
+  if(Array.isArray(d.groups)){   // 내 계좌 그룹(v8~). 형식이 맞는 것만
+    state.groups = d.groups.filter(g => g && g.id && g.name && Array.isArray(g.members)); save('groups', state.groups);
+  }
+}
+
+/** 백업 파일 읽기 → 형식 검사 → 확인 후 덮어쓰기 */
+function importBackup(e){
+  const f = e.target.files[0]; e.target.value = '';
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    let d;
+    try{ d = JSON.parse(r.result); }catch(err){ alert('JSON 파일을 읽지 못했습니다.'); return; }
+    const v = checkBackup(d);
+    if(v.error){ alert(v.error); return; }
+    if(!confirm(`백업(${(d.exported_at || '').slice(0, 10)}, 수동 계좌 ${d.manual.length}개` +
+      (v.hasLegacy ? `, 001 이력 ${Object.keys(d.legacy.accounts).length}개 계좌` : '') + ')으로 현재 기록과 설정을 덮어쓸까요?')) return;
+    applyBackupData(d, v.hasLegacy);
+    save('inboxApplied', []); applyInbox();   // 복원한 기록 위에 HTS 엑셀 다시 반영
+    const s = d.settings || {};
+    if(s.currency === 'KRW' || s.currency === 'USD'){ state.currency = s.currency; save('currency', s.currency); }
+    if(CONFIG.GROUP_LABEL[s.group]){ state.group = s.group; save('group', s.group); }
+    if(typeof s.merge === 'boolean'){ state.merge = s.merge; save('merge', s.merge); }
+    if(s.pieMode === 'account' || s.pieMode === 'holding'){ state.pieMode = s.pieMode; save('pieMode', s.pieMode); }
+    if(s.trendMode === 'total' || s.trendMode === 'account'){ state.trendMode = s.trendMode; save('trendMode', s.trendMode); }
+    if(s.trendMetric === 'amount' || s.trendMetric === 'rate'){ state.trendMetric = s.trendMetric; save('trendMetric', s.trendMetric); }
+    if([0, 1, 3, 6, 12, 'ytd'].includes(s.trendRange) || /^y\d{4}$/.test(String(s.trendRange))){ state.trendRange = s.trendRange; save('trendRange', s.trendRange); }
+    if(s.weightMode === 'holding' || s.weightMode === 'account'){ state.weightMode = s.weightMode; save('weightMode', s.weightMode); }
+    if(s.divTax === 'gross' || s.divTax === 'net'){ state.divTax = s.divTax; save('divTax', s.divTax); }
+    if([0, 12, 24, 36, 'ytd'].includes(s.divRange) || /^y\d{4}$/.test(String(s.divRange))){ state.divRange = s.divRange; save('divRange', s.divRange); }
+    render();
+  };
+  r.onerror = () => alert('파일을 읽지 못했습니다.');
+  r.readAsText(f, 'utf-8');
+}
+
+/* ----- 7-2. 001 대시보드 백업 가져오기 ----- */
+/** 계좌 이름 비교용: 점·공백 제거, 소문자. 예: '1.계좌' → '1계좌' */
+const normName = s => String(s || '').replace(/[.\s]/g, '').toLowerCase();
+
+/**
+ * 001 백업(format 'pf_dashboard_multi') → 002 로 변환.
+ * - 이름이 API 계좌와 같으면: 그 계좌의 과거 이력(state.legacy.accounts[API id])
+ * - 아니고 원화 계좌면: 수동 계좌 기록(같은 이름 수동 계좌가 있으면 합침, 같은 날짜는 기존 입력 유지)
+ * - 아니고 외화 계좌면: 건너뜀(수동 계좌는 원화만 지원)
+ * 종목별 이력(holdings)도 P3(비중 변화)용으로 함께 보관.
+ */
+function import001(e){
+  const f = e.target.files[0]; e.target.value = '';
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    let d;
+    try{ d = JSON.parse(r.result); }catch(err){ alert('JSON 파일을 읽지 못했습니다.'); return; }
+    if(!d || d.format !== 'pf_dashboard_multi' || !Array.isArray(d.accounts)){
+      alert('001 대시보드의 전체 계좌 백업 파일(portfolio_backup_all_*.json)이 아닙니다.'); return;
+    }
+    // API 계좌 이름 → id (모든 스냅샷 기준)
+    const apiByName = new Map();
+    SNAPS.forEach(s => s.accounts.forEach(a => apiByName.set(normName(a.name), a)));
+
+    const legacy = { importedAt: nowLocal(), source: f.name, accounts: {} };
+    const manual = JSON.parse(JSON.stringify(state.manual));
+    const report = { api:[], manual:[], skip:[] };
+
+    d.accounts.forEach(acc => {
+      const snaps = (acc.snapshots || []).filter(s => s && s.date && Number.isFinite(s.totalValue));
+      if(!snaps.length){ report.skip.push(`${acc.name}(기록 없음)`); return; }
+      const points = snaps.map(s => ({ date:s.date, eval:s.totalValue, buy:s.totalCost, pl:s.totalGain, cash:s.cash || 0 }));
+      const holdings = (acc.holdings || []).map(h => ({ ticker:h.ticker || h.code, name:h.name, currency:h.currency || acc.currency,
+        history:(h.history || []).map(x => ({ date:x.date, qty:x.qty, value:x.value, gain:x.gainAmt })) }));
+      const api = apiByName.get(normName(acc.name));
+      if(api){
+        legacy.accounts[api.id] = { name:api.name, currency:acc.currency, points, holdings };
+        report.api.push(`${acc.name}→${api.name} ${points.length}건`);
+      }else if(acc.currency === 'KRW'){
+        const name = String(acc.name).replace(/\./g, '');
+        let mm = manual.find(m => normName(m.name) === normName(name));
+        if(!mm){ mm = { id:'m' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name, entries:[] }; manual.push(mm); }
+        const have = new Set(mm.entries.map(x => x.date));
+        points.filter(p => !have.has(p.date)).forEach(p => mm.entries.push({ date:p.date, total:p.eval + p.cash, cash:p.cash, pl:p.pl }));
+        legacy.accounts['manual:' + mm.id] = { name, currency:'KRW', points:[], holdings };
+        report.manual.push(`${acc.name}→${name} ${points.length}건`);
+      }else report.skip.push(`${acc.name}(외화 계좌인데 같은 이름의 API 계좌 없음)`);
+    });
+
+    const msg = ['001 백업을 가져옵니다.',
+      `API 계좌 과거 이력: ${report.api.join(', ') || '없음'}`,
+      `수동 계좌 기록: ${report.manual.join(', ') || '없음'}`,
+      report.skip.length ? `건너뜀: ${report.skip.join(', ')}` : '',
+      '', '기존 001 이력은 이번 파일로 교체되고, 수동 계좌는 같은 날짜 기존 입력을 유지한 채 합칩니다. 진행할까요?'].filter(x => x !== '').join('\n');
+    if(!confirm(msg)) return;
+    state.legacy = legacy; state.manual = manual;
+    const ok = save('legacy', legacy) && save('manual', manual);
+    render();
+    if(ok) alert('가져오기 완료. [백업 내보내기]로 백업해 두는 것을 권장합니다.');
+  };
+  r.onerror = () => alert('파일을 읽지 못했습니다.');
+  r.readAsText(f, 'utf-8');
+}
+
+/* ----- 7-3. 수동 계좌: 나무증권 국내 잔고 엑셀 가져오기 ----- */
+/*
+  국내 잔고 양식(001과 같음): 1행 헤더, 종목당 1행, 마지막 '합계' 행(종목# 비어 있음)은 건너뜀.
+  사용 열: 종목# / 종목명 / 현재잔고(수량) / 매입가 / 현재가 / 평가금액(없으면 수량×현재가)
+  매입금액 = 수량 × 매입가 (수수료 제외 → 단순화), 평가손익 = 평가금액 − 매입금액
+  해외 잔고 양식은 받지 않음(수동 계좌는 원화 전용, 해외 계좌는 API로 수집)
+*/
+let xlsxRows = [];   // [{file, stem, parsed:[종목], error, target:'수동 id'|'new'|'skip', cash, checked, status}]
+
+/** 헤더 비교용: 공백·줄바꿈 표시(_x000D_) 제거 */
+const normHeader = s => String(s == null ? '' : s).replace(/_x000D_|\s/g, '');
+/** 헤더 행에서 이름이 일치하는 열 위치(-1 = 없음) */
+const findCol = (row, name) => (row || []).findIndex(c => normHeader(c) === name);
+
+/** 파일 1개 → 시트 행 배열 (Promise) */
+function readXlsxRows(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = ev => {
+      try{
+        const wb = XLSX.read(new Uint8Array(ev.target.result), { type:'array' });
+        resolve(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:null }));
+      }catch(err){ reject(err); }
+    };
+    r.onerror = () => reject(new Error('파일을 읽지 못했습니다.'));
+    r.readAsArrayBuffer(file);
+  });
+}
+
+/** 셀 → 숫자. CSV 문자열 '1,074' 처럼 쉼표 있는 값도 처리. 숫자가 아니면 0 */
+const cellNum = v => typeof v === 'number' ? v : (Number(String(v == null ? '' : v).replace(/,/g, '').trim()) || 0);
+
+/** 국내 잔고 행 → [{code,name,qty,avg,price,eval,buy}]. 같은 종목이 여러 행이면 합산(매입가는 수량 가중평균) */
+function parseDomesticXlsx(rows){
+  const h = rows[0] || [];
+  if(findCol(h, '잔고수량') >= 0 && findCol(rows[1], '종목코드') >= 0) throw new Error('해외 잔고 양식입니다. 수동 계좌는 국내 잔고 파일만 받습니다.');
+  const ci = findCol(h, '종목#'), ni = findCol(h, '종목명'), qi = findCol(h, '현재잔고'),
+        ai = findCol(h, '매입가'), pi = findCol(h, '현재가'), ei = findCol(h, '평가금액');
+  if([ci, ni, qi, ai, pi].some(i => i < 0)) throw new Error('국내 잔고 양식의 필수 열(종목#/종목명/현재잔고/매입가/현재가)이 없습니다.');
+  const byCode = new Map();
+  for(let i = 1; i < rows.length; i++){
+    const r = rows[i]; if(!r) continue;
+    const code = r[ci] == null ? '' : String(r[ci]).trim();
+    if(!code) continue;                                     // 합계 행
+    const qty = cellNum(r[qi]), avg = cellNum(r[ai]), price = cellNum(r[pi]);
+    if(qty <= 0) continue;
+    const ev = ei >= 0 && cellNum(r[ei]) ? cellNum(r[ei]) : qty * price;
+    const p = byCode.get(code);
+    if(p){ p.qty += qty; p.eval += ev; p.buy += qty * avg; p.avg = p.buy / p.qty; if(price) p.price = price; }
+    else byCode.set(code, { code, name:String(r[ni] == null ? '' : r[ni]).trim(), qty, avg, price, eval:ev, buy:qty * avg });
+  }
+  const list = [...byCode.values()];
+  if(!list.length) throw new Error('종목 행을 찾지 못했습니다.');
+  return list;
+}
+
+/** 파일명 → 수동 계좌 자동 연결: ① 이름 완전 일치 ② 한쪽이 다른 쪽을 포함(예: ISA ↔ ISA230101)
+    ③ 이름 끝 숫자를 빼고 일치(예: ISA230105 ↔ ISA230101). ②③은 후보가 1개일 때만 */
+function guessTarget(stem, used){
+  const fn = normName(stem).replace(/[^0-9a-z가-힣]/g, '');
+  // API 계좌와 이름이 같은 파일(예: 국내1.xlsx)은 기본 '가져오지 않음' — API로 이미 수집됨
+  if(SNAPS.some(s => s.accounts.some(a => normName(a.name).replace(/[^0-9a-z가-힣]/g, '') === fn))) return 'skip';
+  const cands = state.manual.filter(m => !used.has(m.id));
+  const nm = m => normName(m.name).replace(/[^0-9a-z가-힣]/g, '');
+  let hit = cands.filter(m => nm(m) === fn);
+  if(hit.length !== 1) hit = cands.filter(m => fn && nm(m) && (nm(m).includes(fn) || fn.includes(nm(m))));
+  const base = s => s.replace(/\d+$/, '');
+  if(hit.length !== 1 && base(fn)) hit = cands.filter(m => base(nm(m)) === base(fn));
+  return hit.length === 1 ? hit[0].id : 'new';
+}
+/** 연결 계좌의 마지막 예수금(새 계좌면 0) */
+function defaultCash(target){
+  const m = state.manual.find(x => x.id === target);
+  const e = m && m.entries.slice().sort((a, b) => a.date.localeCompare(b.date)).pop();
+  return e ? e.cash : 0;
+}
+
+async function loadXlsxFiles(files){
+  files = files.filter(f => /\.xlsx?$/i.test(f.name));
+  if(!files.length) return;
+  xlsxRows = [];
+  const used = new Set();
+  for(const f of files){
+    const row = { file:f.name, stem:f.name.replace(/\.[^.]+$/, ''), parsed:null, error:'', checked:false, status:'' };
+    try{ row.parsed = parseDomesticXlsx(await readXlsxRows(f)); }catch(err){ row.error = err.message; }
+    row.target = row.error ? 'skip' : guessTarget(row.stem, used);
+    if(row.target !== 'new' && row.target !== 'skip') used.add(row.target);
+    row.cash = defaultCash(row.target);
+    row.checked = !row.error;
+    xlsxRows.push(row);
+  }
+  document.getElementById('xlsxDate').value = today();
+  document.getElementById('xlsxMsg').textContent = '';
+  document.getElementById('xlsxPanel').classList.remove('hidden');
+  renderXlsxPanel();
+}
+
+function renderXlsxPanel(){
+  const opts = r => [`<option value="new"${r.target === 'new' ? ' selected' : ''}>새 계좌: ${esc(r.stem)}</option>`]
+    .concat(state.manual.map(m => `<option value="${esc(m.id)}"${r.target === m.id ? ' selected' : ''}>${esc(m.name)}</option>`))
+    .concat([`<option value="skip"${r.target === 'skip' ? ' selected' : ''}>가져오지 않음</option>`]).join('');
+  const body = xlsxRows.map((r, i) => {
+    if(r.error) return `<tr data-i="${i}"><td></td><td>${esc(r.file)}</td><td colspan="4" class="neg">${esc(r.error)}</td></tr>`;
+    const ev = r.parsed.reduce((s, h) => s + h.eval, 0), pl = r.parsed.reduce((s, h) => s + h.eval - h.buy, 0);
+    return `<tr data-i="${i}">
+      <td><input type="checkbox" data-f="chk"${r.checked ? ' checked' : ''}></td>
+      <td>${esc(r.file)}${r.status ? ` <span class="tag ${r.status === '기록됨' ? 'api' : 'manual'}">${esc(r.status)}</span>` : ''}</td>
+      <td><select data-f="target">${opts(r)}</select></td>
+      <td class="num">${r.parsed.length}</td>
+      <td class="num">${money(ev, 'KRW')}<div class="small ${cls(pl)}">${signed(pl, 'KRW')}</div></td>
+      <td><input data-f="cash" inputmode="numeric" style="width:120px" value="${Math.round(r.cash || 0).toLocaleString('ko-KR')}"></td></tr>`;
+  }).join('');
+  document.getElementById('xlsxTable').innerHTML = `<thead><tr><th></th><th>파일</th><th>계좌</th><th class="num">종목</th>
+    <th class="num">평가금액·손익(원)</th><th>예수금(원)</th></tr></thead><tbody>${body}</tbody>`;
+}
+
+/** 체크한 행을 수동 계좌 기록(종목 포함)으로 저장. 같은 계좌·같은 날짜는 덮어씀 */
+function saveXlsxRows(){
+  const date = document.getElementById('xlsxDate').value;
+  if(!date){ alert('기준일을 입력하세요.'); return; }
+  const rows = xlsxRows.filter(r => r.checked && !r.error && r.target !== 'skip');
+  if(!rows.length){ alert('기록할 파일을 선택하세요.'); return; }
+  if(rows.some(r => !Number.isFinite(r.cash) || r.cash < 0)){ alert('예수금을 0 이상의 숫자로 입력하세요.'); return; }
+  const targets = rows.map(r => r.target).filter(t => t !== 'new');
+  if(new Set(targets).size !== targets.length){ alert('같은 계좌에 파일 두 개가 연결되어 있습니다. 계좌 선택을 확인하세요.'); return; }
+  rows.forEach(r => {
+    let m = state.manual.find(x => x.id === r.target);
+    if(!m){ m = { id:'m' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name:r.stem, entries:[] }; state.manual.push(m); r.target = m.id; }
+    const ev = r.parsed.reduce((s, h) => s + h.eval, 0), buy = r.parsed.reduce((s, h) => s + h.buy, 0);
+    m.entries = m.entries.filter(e => e.date !== date).concat([{
+      date, total: ev + r.cash, cash: r.cash, pl: ev - buy,
+      holdings: r.parsed.map(h => ({ code:h.code, name:h.name, qty:h.qty, avg:h.avg, price:h.price, eval:h.eval, buy:h.buy }))
+    }]);
+    r.status = '기록됨'; r.checked = false;
+  });
+  const ok = save('manual', state.manual);
+  document.getElementById('xlsxMsg').textContent = ok ? `${rows.length}개 계좌 기록 완료 (${date})` : '저장 실패 — 위 경고 확인';
+  render(); renderXlsxPanel();
+}
+
+/* ----- 7-4. 수동 계좌: HTS 엑셀 자동 반영 (수집기 v6 의 manual_inbox) ----- */
+/*
+  수동엑셀/ 폴더의 파일을 수집기가 data.js 에 담아 줌 → 페이지를 열 때 자동 기록. 해석은 7-3 parseDomesticXlsx 그대로.
+  - 계좌 연결: 파일명(guessTarget). 연결할 수동 계좌가 없으면 파일명으로 새 수동 계좌. API 계좌 이름이면 건너뜀
+  - 기준일 = 파일 저장 날짜. 같은 계좌·같은 날짜 기록은 덮어씀
+  - 예수금: HTS 자동 저장이 화면에서 읽고 검증한 값(it.cash)이 있으면 그 값.
+            없으면 그 날짜 이전 마지막 기록의 예수금 유지(없으면 0, 단순화). 바뀌었으면 관리 탭에서 다시 기록
+  - 반영한 파일 id 는 nhdash:inboxApplied 에 기억(실패한 파일도 → 같은 경고 반복 방지). 백업 복원 후에는 비우고 다시 반영
+*/
+/** 반환: 기록이 바뀌었으면 true */
+function applyInbox(){
+  const items = (NH && Array.isArray(NH.manual_inbox)) ? NH.manual_inbox.slice().sort((a, b) => a.saved_at.localeCompare(b.saved_at)) : [];
+  const applied = new Set(load('inboxApplied', []));
+  const todo = items.filter(it => !applied.has(it.id));
+  if(!todo.length) return false;
+  const done = [], fail = [];
+  let noLib = 0, keptCash = 0;
+  todo.forEach(it => {
+    // CSV/TXT 는 수집기가 행 배열(rows)로 줌 → 라이브러리 불필요. xlsx(b64)만 SheetJS 필요
+    if(!Array.isArray(it.rows) && typeof XLSX === 'undefined'){ noLib++; return; }   // 반영 표시 안 함 → 다음에 재시도
+    applied.add(it.id);
+    try{
+      let rows = it.rows;
+      if(!rows){
+        const bin = atob(it.b64), buf = new Uint8Array(bin.length);
+        for(let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        const wb = XLSX.read(buf, { type:'array' });
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:null });
+      }
+      const parsed = parseDomesticXlsx(rows);
+      const target = guessTarget(it.name, new Set());
+      if(target === 'skip') return;
+      let m = state.manual.find(x => x.id === target);
+      if(!m){ m = { id:'m' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name:it.name, entries:[] }; state.manual.push(m); }
+      const prev = m.entries.filter(e => e.date <= it.date).sort((a, b) => a.date.localeCompare(b.date)).pop();
+      const fromScreen = typeof it.cash === 'number' && it.cash >= 0;
+      const cash = fromScreen ? it.cash : (prev ? prev.cash : 0);
+      const ev = parsed.reduce((s, h) => s + h.eval, 0), buy = parsed.reduce((s, h) => s + h.buy, 0);
+      m.entries = m.entries.filter(e => e.date !== it.date).concat([{
+        date:it.date, total:ev + cash, cash, pl:ev - buy, src:'hts',
+        holdings: parsed.map(h => ({ code:h.code, name:h.name, qty:h.qty, avg:h.avg, price:h.price, eval:h.eval, buy:h.buy }))
+      }]);
+      if(!fromScreen) keptCash++;
+      done.push(`${m.name} ${it.date.slice(5)} (${parsed.length}종목, 평가 ${money(ev, 'KRW')}, 예수금 ${money(cash, 'KRW')}${fromScreen ? '' : ' 직전값'})`);
+    }catch(err){ fail.push(`${it.file}: ${err.message}`); }
+  });
+  // 기억 목록은 data.js 에 아직 있는 파일만 유지(무한히 커지지 않게)
+  const ids = new Set(items.map(it => it.id));
+  save('inboxApplied', [...applied].filter(id => ids.has(id)));
+  if(noLib) fail.push(`엑셀(.xlsx) ${noLib}개: 엑셀 처리 라이브러리(SheetJS)를 불러오지 못함 — 인터넷 연결 후 새로고침`);
+  if(fail.length) showWarn('HTS 엑셀 반영 실패 — ' + fail.join(' / '));
+  if(!done.length) return false;
+  const ok = save('manual', state.manual);
+  document.getElementById('inboxText').textContent = ok
+    ? `HTS 엑셀 자동 반영: ${done.join(', ')}.` + (keptCash ? ' 예수금 "직전값"은 화면 인식이 없어 이전 기록을 쓴 것 — 바뀌었으면 관리 탭에서 수정하세요.' : '')
+    : 'HTS 엑셀을 읽었지만 브라우저 저장에 실패했습니다(위 경고 참고).';
+  document.getElementById('inboxBar').classList.remove('hidden');
+  return true;
+}
+
+/* ===== 8. 시작 ===== */
+(function init(){
+  if(!NH) document.getElementById('noData').classList.remove('hidden');
+  if(state.currency === 'USD' && !fxOf(LATEST)) state.currency = 'KRW';
+  if(!CONFIG.GROUP_LABEL[state.group]) state.group = 'all';
+  document.getElementById('mDate').value = today();
+  // 저장소 사용 가능 여부 미리 확인(사생활 보호 모드 등)
+  try{ localStorage.setItem(CONFIG.PREFIX + '_probe', '1'); localStorage.removeItem(CONFIG.PREFIX + '_probe'); }
+  catch(e){ warnStorage(e); }
+  bindEvents();
+  if(MOBILE){
+    // 모바일 읽기 전용: 관리 탭·업데이트 방법 숨김, 백업·복원·HTS 반영 안 함. 머리띠 버전 태그에 표시
+    document.querySelectorAll('#tabs button[data-tab="manage"], #helpBtn').forEach(el => el.classList.add('hidden'));
+    document.getElementById('verTag').textContent = CONFIG.VERSION + ' · 읽기 전용';
+    if(MOBILE.published_at) document.getElementById('verTag').title = '올린 시각 ' + MOBILE.published_at;
+    showTab(tabFromHash() || state.tab);
+    checkLastRun();
+    return;
+  }
+  checkEmbeddedBackup();
+  // 복원 안내가 떠 있으면(브라우저 기록 비었음 등) HTS 엑셀 반영은 복원/닫기 뒤로 미룸 — 먼저 반영하면 복원 안내 판단이 꼬임
+  if(document.getElementById('restoreBar').classList.contains('hidden')) applyInbox();
+  showTab(tabFromHash() || state.tab);   // 첫 화면: 주소 #해시 > 마지막 탭
+  checkLastRun();
+  initAutoBackup();
+})();
+</script>
+
+<script>
+/* ===== 모바일: 암호 해제 후 대시보드 실행 (publish_mobile.py 가 넣음) =====
+   data.enc = {iter, salt, iv, aad, ct} (base64). 키 = PBKDF2-SHA256(비밀번호 NFC), AES-256-GCM.
+   푼 데이터는 메모리에만 둠(브라우저 저장 안 함). 비밀번호 칸은 풀린 뒤 비움 */
+(function(){
+  var form = document.getElementById('lockForm'), pw = document.getElementById('lockPw'),
+      btn = document.getElementById('lockBtn'), msg = document.getElementById('lockMsg');
+  function bytes(s){ var bin = atob(s), u = new Uint8Array(bin.length); for(var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function setMsg(t, err){ msg.textContent = t; msg.classList.toggle('err', !!err); }
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    if(!window.crypto || !crypto.subtle){ setMsg('이 브라우저에서는 암호를 풀 수 없습니다(https 주소로 열어야 함).', true); return; }
+    btn.disabled = true; setMsg('여는 중…');
+    try{
+      var res = await fetch('data.enc', { cache:'no-store' });
+      if(!res.ok) throw new Error('데이터 파일을 받지 못했습니다 (' + res.status + ')');
+      var box = await res.json();
+      var enc = new TextEncoder();
+      var base = await crypto.subtle.importKey('raw', enc.encode(pw.value.normalize('NFC')), 'PBKDF2', false, ['deriveKey']);
+      var key = await crypto.subtle.deriveKey({ name:'PBKDF2', salt:bytes(box.salt), iterations:box.iter, hash:'SHA-256' },
+                                              base, { name:'AES-GCM', length:256 }, false, ['decrypt']);
+      var plain;
+      try{ plain = await crypto.subtle.decrypt({ name:'AES-GCM', iv:bytes(box.iv), additionalData:enc.encode(box.aad) }, key, bytes(box.ct)); }
+      catch(err){ throw new Error('비밀번호가 맞지 않습니다.'); }
+      var data = JSON.parse(new TextDecoder().decode(plain));
+      pw.value = '';
+      window.NH_DATA = data.nh;
+      window.NH_MOBILE = { backup:data.backup, published_at:data.published_at };
+      document.getElementById('lock').remove();
+      document.body.classList.remove('locked');
+      var s = document.createElement('script');
+      s.textContent = document.getElementById('app-main').textContent;
+      document.body.appendChild(s);
+    }catch(err){
+      setMsg(err.message || String(err), true); btn.disabled = false; pw.select();
+    }
+  });
+  pw.focus();
+})();
+</script>
+</body>
+</html>
